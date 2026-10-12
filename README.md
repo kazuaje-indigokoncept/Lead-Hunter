@@ -111,16 +111,33 @@ Si en hPanel tienes activado el firewall del VPS, permite los puertos 80 y 443.
 
 **Con dominio propio:** crea un registro DNS tipo A (ej. `leads.tuagencia.com` → IP del VPS), cambia `SITE_ADDRESS` en `.env` y ejecuta `docker compose up -d`.
 
+## Campañas por tandas programadas
+
+Para reducir el riesgo de bloqueos por scraping, una campaña puede ejecutarse **por tandas** en lugar de hacer todas las búsquedas seguidas. Es la opción predeterminada al crear una campaña (sección **Ejecución**).
+
+- Una **búsqueda** es una palabra clave en una ubicación: 3 palabras × 2 ubicaciones = 6 búsquedas.
+- Cada **tanda** hace las búsquedas indicadas (por defecto 1) y revisa la web, LinkedIn e Instagram solo de los negocios encontrados en esa tanda.
+- Las tandas se separan por el intervalo configurado (entre 5 minutos y 7 días), con una variación aleatoria de ±15 % para no seguir un patrón fijo.
+- Solo se ejecuta **una tanda programada a la vez** en todo el servidor, aunque haya varias campañas programadas.
+- Si una tanda falla (bloqueo, captcha, error de red), se repite tras el doble del intervalo. Tras 3 fallos seguidos la campaña queda en **Error** y se puede reanudar a mano.
+- En la campaña: **Ejecutar tanda ahora**, **Pausar**, **Reanudar** y **⏱ Programación** para cambiar el ritmo o desactivarlo. Lo ya encontrado se conserva.
+- Si el servidor se reinicia (por ejemplo, al desplegar en Railway), la tanda interrumpida se repite automáticamente al arrancar.
+
 ## Usuarios y privacidad de datos
 
 Cada usuario ve solo sus propias campañas, leads, empresas y contactos; no puede abrirlos, modificarlos ni exportarlos aunque conozca su número. El administrador ve todo, y en la barra lateral aparece de quién es cada campaña. Si el mismo negocio aparece en campañas de dos usuarios, cada uno tiene su propia ficha de empresa.
 
-- **Crear usuarios:** Ajustes → Usuarios del equipo. Solo el administrador puede crearlos.
-- **Olvido de contraseña de un usuario:** el administrador pulsa **Contraseña** junto a su nombre y le asigna una nueva; sus sesiones abiertas se cierran.
-- **Eliminar un usuario:** sus campañas y leads pasan al administrador que lo elimina; no se borran datos.
+Los administradores gestionan el equipo en la sección **Usuarios** del menú lateral:
+
+- **Nuevo usuario:** propone una contraseña aleatoria y copia los datos de acceso al portapapeles para compartirlos.
+- **Rol:** Usuario (solo lo suyo) o Administrador (todo, más usuarios y ajustes). Siempre debe quedar al menos un administrador activo.
+- **Desactivar / Activar:** bloquea el acceso al instante y cierra sus sesiones, sin borrar datos. Es la opción recomendada cuando alguien deja el equipo.
+- **Contraseña:** asigna una nueva y cierra sus sesiones abiertas.
+- **Renombrar**, **Ver campañas** (con acceso directo a cada una) y **Eliminar** (sus campañas y leads pasan al administrador que lo elimina).
+- La tabla muestra estado, sesiones abiertas, campañas, leads y último acceso de cada persona.
 - **Si el administrador olvida su contraseña:** define la variable `RESET_ADMIN_PASSWORD` en el servidor, reinicia, entra y borra la variable.
-- Las claves de API (Ajustes) son compartidas y solo las cambia el administrador.
-- Los datos creados antes de esta versión pasan automáticamente al primer administrador.
+- Las claves de API (Ajustes) son compartidas y solo las cambia un administrador.
+- Los datos creados antes de separar por usuario pasan automáticamente al primer administrador.
 
 ## Configurar las APIs (Ajustes)
 

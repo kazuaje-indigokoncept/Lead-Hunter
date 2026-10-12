@@ -16,6 +16,7 @@
     <div class="side-caption">Espacio de trabajo</div>
     <nav class="space-y-1">
       <button id="navCompanies" class="nav-link" onclick="allCompanies()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 21V4h10v17M14 10h6v11M2 21h20M7 8h4M7 12h4M7 16h4M17 14h1M17 17h1"/></svg>Empresas y responsables</button>
+      <button id="navUsers" class="nav-link" onclick="showUsers()" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.6c2 .7 3.2 2.5 3.5 5.4"/></svg>Usuarios</button>
       <button id="navLeads" class="nav-link" onclick="showAll()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h9M8 13h9M8 17h5"/></svg>Todos los leads</button>
     </nav>
     <div class="side-caption"><span>Campañas</span><span id="campaignCount" class="rounded-md bg-slate-100 px-1.5 py-0.5 tracking-normal">0</span></div>
@@ -65,6 +66,11 @@
       <div class="field"><label>Códigos CIIU (opcional)</label><input type="text" id="fCiiu" placeholder="8621, 5611"><div class="hint">La ubicación se usa como nombre de la Cámara</div></div>
       <label class="chip" style="grid-column:1/-1;width:max-content"><input type="checkbox" id="fCross" checked>Cruzar con Places API (requiere clave; solo en modo API)</label>
     </div>
+    <div class="field"><label>Ejecución</label><select id="fRunMode" onchange="toggleSchedule(); updateEstimate()"><option value="batches" selected>Por tandas programadas (recomendado)</option><option value="now">Todo de una vez</option></select><div class="hint">Por tandas reparte las búsquedas en el tiempo para reducir el riesgo de bloqueos por scraping.</div></div>
+    <div class="grid2" id="scheduleOpts">
+      <div class="field"><label>Búsquedas por tanda</label><input type="number" id="fPerBatch" min="1" max="50" value="1"><div class="hint">Cada búsqueda es una palabra clave en una ubicación. Cada tanda revisa también la web de lo encontrado.</div></div>
+      <div class="field"><label>Una tanda cada</label><div style="display:flex;gap:8px"><input type="number" id="fEvery" min="1" value="1" style="min-width:0"><select id="fEveryUnit" style="max-width:9rem"><option value="1">minutos</option><option value="60" selected>horas</option><option value="1440">días</option></select></div><div class="hint">Entre 5 minutos y 7 días. Varía ±15 % para no seguir un patrón fijo.</div></div>
+    </div>
     <details style="margin-bottom:12px"><summary>Opciones avanzadas</summary>
       <div class="grid2" style="margin-top:10px">
         <div class="field" id="mapsApiOpts"><label>Páginas por consulta de API (20 c/u)</label><select id="fPages"><option>1</option><option>2</option><option selected>3</option></select></div>
@@ -91,16 +97,7 @@
     </div>
     <div class="field"><label>App token de datos.gov.co (opcional)</label><input type="password" id="sSocrata"><div class="hint">Evita límites de velocidad en consultas RUES.</div></div>
     <div class="actions"><button class="btn" onclick="closeModals()">Cancelar</button><button class="btn primary" onclick="saveSettings()">Guardar</button></div>
-    <h2 style="margin-top:26px">Usuarios del equipo</h2>
-    <div id="userList"></div>
-    <div class="grid2" style="margin-top:12px">
-      <input type="text" id="uName" placeholder="Usuario">
-      <input type="password" id="uPass" placeholder="Contraseña (mín. 8)">
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
-      <label class="chip"><input type="checkbox" id="uAdmin">Administrador</label>
-      <button class="btn" onclick="addUser()">＋ Agregar usuario</button>
-    </div>
+    <p class="muted" style="margin-top:20px">Los usuarios del equipo se gestionan en la sección <a href="#" onclick="closeModals();showUsers();return false">Usuarios</a> del menú lateral.</p>
   </div>
 </div>
 
@@ -124,6 +121,29 @@
   </div>
 </div>
 
+<div class="modal-bg" id="userModal">
+  <div class="modal" style="max-width:460px">
+    <div class="mb-6 flex items-start justify-between gap-3"><h2 class="!mb-0">Nuevo usuario</h2><button class="btn ghost sm" type="button" aria-label="Cerrar ventana" onclick="closeModals()">✕</button></div>
+    <div class="field"><label>Usuario</label><input type="text" id="uName" autocomplete="off" placeholder="nombre.apellido"><div class="hint">Mínimo 3 caracteres. Es lo que escribirá para entrar.</div></div>
+    <div class="field"><label>Contraseña inicial</label><div style="display:flex;gap:8px"><input type="text" id="uPass" autocomplete="off" style="min-width:0"><button class="btn sm" type="button" onclick="$('#uPass').value=randomPassword()">Generar</button></div><div class="hint">Mínimo 8 caracteres. Compártela por un canal privado y pídele que la cambie al entrar.</div></div>
+    <div class="field"><label>Rol</label><select id="uRole"><option value="user" selected>Usuario: solo ve sus campañas</option><option value="admin">Administrador: ve todo y gestiona usuarios y ajustes</option></select></div>
+    <div class="actions"><button class="btn" onclick="closeModals()">Cancelar</button><button class="btn primary" onclick="addUser()">Crear usuario</button></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="schModal">
+  <div class="modal" style="max-width:520px">
+    <div class="mb-6 flex items-start justify-between gap-3"><h2 class="!mb-0">Programación de la campaña</h2><button class="btn ghost sm" type="button" aria-label="Cerrar ventana" onclick="closeModals()">✕</button></div>
+    <label class="chip" style="margin-bottom:14px"><input type="checkbox" id="schEnabled" onchange="schPreview()">Ejecutar por tandas programadas</label>
+    <div class="grid2">
+      <div class="field"><label>Búsquedas por tanda</label><input type="number" id="schPerBatch" min="1" max="50" oninput="schPreview()"></div>
+      <div class="field"><label>Una tanda cada</label><div style="display:flex;gap:8px"><input type="number" id="schEvery" min="1" style="min-width:0" oninput="schPreview()"><select id="schEveryUnit" style="max-width:9rem" onchange="schPreview()"><option value="1">minutos</option><option value="60">horas</option><option value="1440">días</option></select></div></div>
+    </div>
+    <div class="estimate" id="schPreview"></div>
+    <div class="actions"><button class="btn" onclick="closeModals()">Cancelar</button><button class="btn primary" onclick="saveSchedule()">Guardar programación</button></div>
+  </div>
+</div>
+
 <div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div><div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Detalle de empresa o lead" tabindex="-1"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -142,6 +162,28 @@ const lines = s => s.split('\n').map(x => x.trim()).filter(Boolean);
 
 let state = {cid: null, page: 1, settings: {}, timer: null, leads: []};
 const PROFILES = {general:'Prospección general', web:'Diseño web', seo:'SEO local', social:'Gestión de redes'};
+const STATUS_LABELS = {pendiente:'Pendiente', 'en curso':'En curso', programada:'Programada', pausada:'Pausada', terminada:'Terminada', detenida:'Detenida', error:'Error'};
+const statusLabel = s => STATUS_LABELS[s] || s;
+const everyLabel = m => m % 1440 === 0 ? `${m/1440} ${m === 1440 ? 'día' : 'días'}` : m % 60 === 0 ? `${m/60} ${m === 60 ? 'hora' : 'horas'}` : `${m} min`;
+// Duración legible con dos unidades como máximo: "1 h 30 min", "2 días 4 h".
+function durationLabel(m) {
+  const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mi = Math.round(m % 60);
+  const parts = [d && `${d} ${d === 1 ? 'día' : 'días'}`, h && `${h} h`, mi && `${mi} min`].filter(Boolean);
+  return parts.slice(0, 2).join(' ') || '0 min';
+}
+const splitMinutes = m => m % 1440 === 0 ? [m/1440, 1440] : m % 60 === 0 ? [m/60, 60] : [m, 1];
+const batchesDone = c => Math.ceil(c.batch_cursor / c.schedule.combos_per_batch);
+const timeLabel = ts => ts ? new Date(ts * 1000).toLocaleString('es-CO', {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}) : '';
+// Texto corto del estado de una campaña programada.
+function scheduleSummary(c) {
+  const sch = c.schedule;
+  if (!sch?.enabled) return '';
+  const base = `Tanda ${Math.min(batchesDone(c), c.batches_total)} de ${c.batches_total} · ${sch.combos_per_batch} ${sch.combos_per_batch === 1 ? 'búsqueda' : 'búsquedas'} cada ${everyLabel(sch.interval_minutes)}`;
+  if (c.running) return base;
+  if (c.status === 'programada' && c.next_run_at) return `${base} · próxima: ${timeLabel(c.next_run_at)}`;
+  if (c.status === 'pausada') return `${base} · en pausa`;
+  return base;
+}
 const FIELD_LABELS = {website:'Web',emails:'Correos',phone:'Teléfono',phones:'Teléfonos',whatsapp:'WhatsApp',instagram:'Instagram',facebook:'Facebook',tiktok:'TikTok',linkedin:'LinkedIn',name:'Nombre',address:'Dirección',category:'Categoría',rating:'Valoración',reviews:'Reseñas',ig_bio:'Biografía Instagram',ig_followers:'Seguidores Instagram'};
 const SOURCE_LABELS = {google_maps_web:'Google Maps (web)',google_maps_api:'Google Places API',website:'Web del negocio',linkedin_public:'LinkedIn público',instagram_public:'Instagram público',instagram_api:'API de Instagram',manual:'Aportado manualmente',demo:'Demostración',rues:'RUES','rues+maps':'RUES y Maps'};
 const F = {q:'', has_email:false, has_wa:false, no_web:false, has_ig:false, min_score:0, status:'', sort:'opportunity', sales_profile:'', opportunity:'', tag:'', min_priority:0};
@@ -160,7 +202,7 @@ async function loadSide() {
   $('#sideList').innerHTML = cs.length ? cs.map(c => `
     <button class="side-item ${c.id === state.cid ? 'active' : ''}" onclick="openCampaign(${c.id})" ${c.id === state.cid ? 'aria-current="page"' : ''}>
       <b>${esc(c.name)}</b>
-      <small>${esc(c.client || 'Sin cliente')} · ${c.total} leads · ${c.running ? '⏳ ' + Math.round(c.progress*100) + '%' : esc(c.status)}${ownerLabel(c)}</small>
+      <small>${esc(c.client || 'Sin cliente')} · ${c.total} leads · ${c.running ? '⏳ ' + Math.round(c.progress*100) + '%' : c.schedule?.enabled && c.status === 'programada' ? '⏱ tanda ' + batchesDone(c) + '/' + c.batches_total : esc(statusLabel(c.status))}${ownerLabel(c)}</small>
     </button>`).join('') : '<small style="color:#8ea0bb;padding:6px">Aún no hay campañas.</small>';
   return cs;
 }
@@ -176,8 +218,17 @@ async function openCampaign(id) {
   await renderCampaign(); loadSide();
 }
 
+function campaignButtons(c) {
+  const scheduled = c.schedule?.enabled;
+  if (c.running) return `<button class="btn" onclick="stopC()">■ ${scheduled ? 'Pausar' : 'Detener'}</button>`;
+  if (scheduled && c.status === 'programada') return `<button class="btn" onclick="startC()">▶ Ejecutar tanda ahora</button><button class="btn" onclick="stopC()">⏸ Pausar</button>`;
+  if (scheduled && ['pausada', 'detenida', 'error'].includes(c.status) && c.batch_cursor < c.total_combos) return `<button class="btn" onclick="startC()">▶ Reanudar</button>`;
+  if (scheduled && c.status === 'pendiente') return `<button class="btn" onclick="startC()">▶ Empezar primera tanda</button>`;
+  return `<button class="btn" onclick="startC()">↻ Ejecutar de nuevo</button>`;
+}
+
 async function renderCampaign(refreshOnly = false) {
-  const c = await api(`/api/campaigns/${state.cid}`);
+  const c = state.camp = await api(`/api/campaigns/${state.cid}`);
   const s = c.stats;
   const pct = Math.round(c.progress * 100);
   const head = `
@@ -186,7 +237,7 @@ async function renderCampaign(refreshOnly = false) {
       <div><div class="eyebrow">Descubre · prioriza · conecta</div><h1>${esc(c.name)}</h1>
         <div class="sub">${esc(c.client || 'Sin cliente')} · ${c.keywords.map(esc).join(', ')} · ${c.locations.map(esc).join(' / ')}<br>Servicio: ${esc(PROFILES[c.options.sales_profile || 'general'])}${ownerLabel(c)}</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${c.running ? `<button class="btn" onclick="stopC()">■ Detener</button>` : `<button class="btn" onclick="startC()">↻ Ejecutar de nuevo</button>`}
+        ${campaignButtons(c)}<button class="btn" onclick="openSchedule()">⏱ Programación</button>
         <button class="btn" onclick="showCompanies()">Ver empresas</button><button class="btn" onclick="exportC('csv')">CSV</button>
         <button class="btn primary" onclick="exportC('xlsx')">⬇ Excel</button>
         <button class="btn danger" onclick="deleteC()">Eliminar</button>
@@ -201,8 +252,9 @@ async function renderCampaign(refreshOnly = false) {
       <div class="tile"><div class="v">${s.avg_score}</div><div class="l">Promedio de datos</div></div>
     </div>
     <div class="card progress">
-      <div style="display:flex;justify-content:space-between"><b>${c.running ? 'Buscando…' : 'Estado: ' + esc(c.status)}</b><span class="muted">${pct}% · ${c.api_calls} llamadas a Google</span></div>
+      <div style="display:flex;justify-content:space-between"><b>${c.running ? 'Buscando…' : 'Estado: ' + esc(statusLabel(c.status))}</b><span class="muted">${pct}% · ${c.api_calls} llamadas a Google</span></div>
       <div class="bar"><i style="width:${pct}%"></i></div>
+      ${c.schedule?.enabled ? `<div class="muted" style="margin-top:8px">⏱ ${esc(scheduleSummary(c))}</div>` : ''}
       <details ${c.running || c.status === 'error' ? 'open' : ''}><summary>Registro</summary><div class="log" id="log">${esc(c.log.slice(-40).join('\n'))}</div></details>
     </div>`;
   if (refreshOnly && $('#headWrap')) { $('#headWrap').innerHTML = head; const l = $('#log'); if (l) l.scrollTop = 1e6; }
@@ -212,7 +264,7 @@ async function renderCampaign(refreshOnly = false) {
   }
   await loadLeads();
   clearInterval(state.timer);
-  if (c.running) state.timer = setTimeout(() => { if (state.cid === c.id) { renderCampaign(true); loadSide(); } }, 1500);
+  if (c.running || c.status === 'programada') state.timer = setTimeout(() => { if (state.cid === c.id) { renderCampaign(true); loadSide(); } }, c.running ? 1500 : 30000);
 }
 
 function leadsCard() {
@@ -359,7 +411,38 @@ async function showAll() {
 }
 
 function exportC(fmt) { const p = filterParams(); p.set('fmt', fmt); location.href = '/api/export?' + p; }
-async function startC() { await api(`/api/campaigns/${state.cid}/start`, {method: 'POST'}); toast('Campaña en curso'); renderCampaign(); loadSide(); }
+async function startC() {
+  try { await api(`/api/campaigns/${state.cid}/start`, {method: 'POST'}); } catch (e) { return toast(e.message); }
+  toast(state.camp?.schedule?.enabled ? 'Tanda en curso' : 'Campaña en curso'); renderCampaign(); loadSide();
+}
+function openSchedule() {
+  const sch = state.camp.schedule, [n, unit] = splitMinutes(sch.interval_minutes);
+  $('#schEnabled').checked = sch.enabled; $('#schPerBatch').value = sch.combos_per_batch;
+  $('#schEvery').value = n; $('#schEveryUnit').value = unit;
+  schPreview(); $('#schModal').classList.add('open');
+}
+function scheduleText(total, perBatch, minutes) {
+  const batches = Math.ceil(total / perBatch);
+  const span = (batches - 1) * minutes;
+  return `<b>${total}</b> ${total === 1 ? 'búsqueda' : 'búsquedas'} en <b>${batches}</b> ${batches === 1 ? 'tanda' : 'tandas'}` +
+    (batches > 1 ? `, una cada <b>${everyLabel(minutes)}</b> · terminaría en unas <b>${durationLabel(span)}</b>.` : '.');
+}
+function schPreview() {
+  const on = $('#schEnabled').checked;
+  ['#schPerBatch', '#schEvery', '#schEveryUnit'].forEach(id => $(id).disabled = !on);
+  const minutes = +$('#schEvery').value * +$('#schEveryUnit').value;
+  $('#schPreview').innerHTML = !on ? 'Al ejecutar, la campaña hará todas las búsquedas seguidas.'
+    : minutes < 5 || minutes > 10080 ? 'El intervalo debe estar entre 5 minutos y 7 días.'
+    : scheduleText(state.camp.total_combos, Math.max(1, +$('#schPerBatch').value || 1), minutes) +
+      (state.camp.batch_cursor ? `<br>Ya hechas: ${state.camp.batch_cursor} de ${state.camp.total_combos}; se continúa desde ahí.` : '');
+}
+async function saveSchedule() {
+  try {
+    await api(`/api/campaigns/${state.cid}/schedule`, {method: 'PUT', body: {enabled: $('#schEnabled').checked,
+      combos_per_batch: +$('#schPerBatch').value, interval_minutes: +$('#schEvery').value * +$('#schEveryUnit').value}});
+    closeModals(); toast('Programación guardada'); renderCampaign(); loadSide();
+  } catch (e) { toast(e.message); }
+}
 async function stopC() { await api(`/api/campaigns/${state.cid}/stop`, {method: 'POST'}); setTimeout(() => { renderCampaign(); loadSide(); }, 400); }
 async function deleteC() {
   if (!confirm('¿Eliminar esta campaña y todos sus leads?')) return;
@@ -367,6 +450,7 @@ async function deleteC() {
 }
 
 // ---------- nueva campaña ----------
+function toggleSchedule() { $('#scheduleOpts').style.display = $('#fRunMode').value === 'batches' ? 'grid' : 'none'; }
 function toggleRues() { $('#ruesOpts').style.display = document.querySelector('[value=rues]').checked ? 'grid' : 'none'; }
 function toggleMapsMode() {
   const web = $('#fMapsMode').value === 'web';
@@ -383,7 +467,9 @@ function formData() {
       maps_mode: $('#fMapsMode').value, maps_max_results: +$('#fMapsLimit').value,
       max_pages: +$('#fPages').value, min_rating: $('#fRating').value ? +$('#fRating').value : null,
       region: $('#fRegion').value.trim().toUpperCase(), rues_since: $('#fSince').value.trim(),
-      rues_ciiu: $('#fCiiu').value.trim(), rues_cross_maps: !$('#fCross').disabled && $('#fCross').checked}
+      rues_ciiu: $('#fCiiu').value.trim(), rues_cross_maps: !$('#fCross').disabled && $('#fCross').checked,
+      schedule: {enabled: $('#fRunMode').value === 'batches', combos_per_batch: +$('#fPerBatch').value || 1,
+        interval_minutes: (+$('#fEvery').value || 1) * +$('#fEveryUnit').value}}
   };
 }
 async function updateEstimate() {
@@ -391,17 +477,22 @@ async function updateEstimate() {
   if (!d.keywords.length || !d.locations.length) { $('#estimate').textContent = 'Escribe palabras clave y ubicaciones para ver el costo estimado.'; return; }
   let e;
   try { e = await api('/api/estimate', {method: 'POST', body: d}); }
-  catch (_) { $('#estimate').textContent = 'Revisa las opciones: el máximo de fichas debe estar entre 1 y 120.'; return; }
+  catch (err) { $('#estimate').textContent = 'Revisa las opciones: ' + err.message; return; }
+  const sch = d.options.schedule;
+  const plan = sch.enabled ? '<br>⏱ ' + scheduleText(e.queries, sch.combos_per_batch, sch.interval_minutes) + ' La primera tanda empieza al crear la campaña.' : '';
   $('#estimate').innerHTML = state.settings.demo_mode === '1'
     ? `<b>${e.queries}</b> consultas · modo demostración (sin costo)`
     : e.maps_mode === 'web'
     ? `<b>${e.queries}</b> consultas · hasta <b>${e.max_results}</b> fichas a visitar · <b>sin clave ni cargos de Places API</b>. Los resultados pueden ser menores por filtros, duplicados o bloqueos.`
     : `<b>${e.queries}</b> consultas → hasta <b>${e.max_calls}</b> llamadas y <b>${e.max_results}</b> resultados · costo máx. aprox. <b>US$ ${e.max_cost_usd}</b>${d.sources.includes('rues') && d.options.rues_cross_maps ? ' + 1 llamada por negocio RUES' : ''}. Google incluye un cupo gratis mensual por SKU.`;
+  $('#estimate').innerHTML += plan;
 }
 function openNew() {
   $('#newModal').classList.add('open'); $('#fKw').focus();
   toggleMapsMode();
-  ['#fKw','#fLoc','#fPages','#fMapsLimit','#fRating'].forEach(s => $(s).oninput = updateEstimate);
+  toggleSchedule();
+  ['#fKw','#fLoc','#fPages','#fMapsLimit','#fRating','#fPerBatch','#fEvery'].forEach(s => $(s).oninput = updateEstimate);
+  $('#fEveryUnit').onchange = updateEstimate;
   document.querySelectorAll('[name=src]').forEach(i => i.addEventListener('change', updateEstimate));
   updateEstimate();
 }
@@ -420,7 +511,6 @@ async function createCampaign() {
 async function openSettings() {
   if (!state.me?.is_admin) return toast('Solo un administrador puede cambiar los ajustes');
   const s = state.settings = await api('/api/settings');
-  loadUsers();
   $('#sDemo').checked = s.demo_mode === '1'; $('#sGoogle').value = s.google_api_key;
   $('#sPrice').value = s.price_per_1000; $('#sMeta').value = s.meta_token;
   $('#sIg').value = s.ig_user_id; $('#sSocrata').value = s.socrata_token;
@@ -450,25 +540,98 @@ async function savePassword() {
   try { await api('/api/me/password', {method: 'POST', body: {current: $('#pCur').value, new: $('#pNew').value}});
     closeModals(); toast('Contraseña actualizada'); } catch (e) { toast(e.message); }
 }
+// ---------- sección de usuarios (solo administradores) ----------
+let usersOpen = null;  // usuario cuyas campañas están desplegadas
+const accessLabel = v => v ? new Date(v.replace(' ', 'T')).toLocaleString('es-CO', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}) : 'Nunca';
+function randomPassword() {
+  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from(crypto.getRandomValues(new Uint32Array(12)), n => chars[n % chars.length]).join('');
+}
+async function showUsers() {
+  if (!state.me?.is_admin) return toast('Solo un administrador puede gestionar usuarios');
+  setView('Usuarios'); clearTimeout(state.timer); state.cid = null; loadSide();
+  $('#main').innerHTML = `<div class="head"><div><div class="eyebrow">Equipo</div><h1>Usuarios</h1><div class="sub">Cada usuario solo ve sus campañas y leads. Los administradores ven todo.</div></div>
+    <div style="display:flex;gap:8px"><button class="btn" onclick="loadUsers()">Actualizar</button><button class="btn primary" onclick="openNewUser()">＋ Nuevo usuario</button></div></div>
+    <div class="tiles" id="userTiles"></div>
+    <div class="card"><div class="card-title"><div><h2>Personas con acceso</h2><p>Desactivar bloquea el acceso al instante sin borrar sus datos.</p></div></div>
+      <div class="filters"><input id="userQuery" type="search" aria-label="Buscar usuario" placeholder="Buscar usuario…"></div>
+      <div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Actividad</th><th>Último acceso</th><th>Acciones</th></tr></thead><tbody id="userRows"></tbody></table></div></div>`;
+  $('#userQuery').oninput = renderUsers;
+  await loadUsers();
+}
 async function loadUsers() {
-  const us = await api('/api/users');
-  state.users = Object.fromEntries(us.map(u => [u.id, u.username]));
-  $('#userList').innerHTML = us.map(u => `<div class="user-row"><span><b>${esc(u.username)}</b> ${u.is_admin ? '<span class="muted">· admin</span>' : ''}
-      <span class="muted">· ${u.campaign_count} ${u.campaign_count === 1 ? 'campaña' : 'campañas'}</span></span>
-    <span style="display:flex;gap:6px">${u.id === state.me.id ? '<span class="muted">tú</span>' : `<button class="btn sm" onclick="resetUserPassword(${u.id})">Contraseña</button><button class="btn sm danger" onclick="delUser(${u.id})">Eliminar</button>`}</span></div>`).join('');
+  if (!$('#userRows')) return;
+  state.userList = await api('/api/users');
+  state.users = Object.fromEntries(state.userList.map(u => [u.id, u.username]));
+  const us = state.userList;
+  $('#userTiles').innerHTML = [
+    [us.length, 'Usuarios'], [us.filter(u => u.active).length, 'Activos'], [us.filter(u => u.is_admin && u.active).length, 'Administradores'],
+    [us.reduce((n, u) => n + u.campaign_count, 0), 'Campañas'], [us.reduce((n, u) => n + u.active_campaigns, 0), 'Programadas o en curso'],
+    [us.reduce((n, u) => n + u.lead_count, 0), 'Leads']].map(([v, l]) => `<div class="tile"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  await renderUsers();
+}
+async function renderUsers() {
+  const q = ($('#userQuery')?.value || '').trim().toLowerCase();
+  const rows = (state.userList || []).filter(u => !q || u.username.toLowerCase().includes(q));
+  const me = state.me.id;
+  $('#userRows').innerHTML = rows.length ? rows.map(u => `<tr>
+      <td><b>${esc(u.username)}</b>${u.id === me ? ' <span class="muted">(tú)</span>' : ''}<div class="muted">Creado ${esc(accessLabel(u.created_at))}</div></td>
+      <td>${u.id === me ? '<span class="lead-tag tag-inferred">Administrador</span>' : `<select aria-label="Rol de ${esc(u.username)}" onchange="setUserField(${u.id}, 'is_admin', this.value === 'admin', this)"><option value="user" ${u.is_admin ? '' : 'selected'}>Usuario</option><option value="admin" ${u.is_admin ? 'selected' : ''}>Administrador</option></select>`}</td>
+      <td>${u.active ? '<span class="lead-tag tag-present">Activo</span>' : '<span class="lead-tag tag-unknown">Desactivado</span>'}${u.open_sessions ? `<div class="muted">${u.open_sessions} ${u.open_sessions === 1 ? 'sesión abierta' : 'sesiones abiertas'}</div>` : ''}</td>
+      <td>${u.campaign_count} ${u.campaign_count === 1 ? 'campaña' : 'campañas'} · ${u.lead_count} leads${u.active_campaigns ? `<div class="muted">⏱ ${u.active_campaigns} programadas o en curso</div>` : ''}</td>
+      <td>${esc(accessLabel(u.last_login))}</td>
+      <td><div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn sm" onclick="toggleUserCampaigns(${u.id})" ${u.campaign_count ? '' : 'disabled'}>${usersOpen === u.id ? 'Ocultar campañas' : 'Ver campañas'}</button>
+        ${u.id === me ? '' : `<button class="btn sm" onclick="resetUserPassword(${u.id})">Contraseña</button>
+        <button class="btn sm" onclick="renameUser(${u.id})">Renombrar</button>
+        <button class="btn sm" onclick="setUserField(${u.id}, 'active', ${u.active ? 'false' : 'true'})">${u.active ? 'Desactivar' : 'Activar'}</button>
+        <button class="btn sm danger" onclick="delUser(${u.id})">Eliminar</button>`}
+      </div></td></tr>${usersOpen === u.id ? `<tr><td colspan="6" id="userCampaigns" style="background:#f8fafc">Cargando campañas…</td></tr>` : ''}`).join('')
+    : '<tr><td colspan="6" class="empty">No hay usuarios con ese nombre.</td></tr>';
+  if (usersOpen && $('#userCampaigns')) {
+    const cs = await api(`/api/campaigns?owner_id=${usersOpen}`);
+    if (!$('#userCampaigns')) return;
+    $('#userCampaigns').innerHTML = cs.length ? cs.map(c => `<div class="evidence-item" style="display:flex;justify-content:space-between;gap:12px;align-items:center">
+        <span><b>${esc(c.name)}</b><br><span class="muted">${esc(c.client || 'Sin cliente')} · ${c.total} leads · ${c.running ? 'En curso' : esc(statusLabel(c.status))}${c.schedule?.enabled ? ' · ' + esc(scheduleSummary(c)) : ''}</span></span>
+        <button class="btn sm" onclick="openCampaign(${c.id})">Abrir</button></div>`).join('') : '<span class="muted">Sin campañas.</span>';
+  }
+}
+function toggleUserCampaigns(id) { usersOpen = usersOpen === id ? null : id; renderUsers(); }
+function openNewUser() {
+  $('#uName').value = ''; $('#uPass').value = randomPassword(); $('#uRole').value = 'user';
+  $('#userModal').classList.add('open');
 }
 async function addUser() {
-  try { await api('/api/users', {method: 'POST', body: {username: $('#uName').value, password: $('#uPass').value, is_admin: $('#uAdmin').checked}});
-    $('#uName').value = $('#uPass').value = ''; $('#uAdmin').checked = false; toast('Usuario creado'); loadUsers(); } catch (e) { toast(e.message); }
+  const username = $('#uName').value.trim(), password = $('#uPass').value;
+  try { await api('/api/users', {method: 'POST', body: {username, password, is_admin: $('#uRole').value === 'admin'}}); }
+  catch (e) { return toast(e.message); }
+  closeModals(); loadUsers();
+  try { await navigator.clipboard.writeText(`Usuario: ${username}\nContraseña: ${password}`); toast('Usuario creado · datos de acceso copiados'); }
+  catch (_) { toast('Usuario creado'); }
+}
+async function setUserField(id, field, value, select) {
+  const name = state.users?.[id] || 'este usuario';
+  const msg = field === 'active' ? (value ? `¿Activar a ${name}?` : `¿Desactivar a ${name}? Se cerrarán sus sesiones y no podrá entrar. Sus datos se conservan.`)
+    : (value ? `¿Dar rol de administrador a ${name}? Verá todas las campañas y podrá gestionar usuarios y ajustes.` : `¿Quitar el rol de administrador a ${name}?`);
+  if (!confirm(msg)) { if (select) select.value = value ? 'user' : 'admin'; return; }
+  try { await api(`/api/users/${id}`, {method: 'PATCH', body: {[field]: value}}); toast('Usuario actualizado'); }
+  catch (e) { toast(e.message); }
+  loadUsers();
+}
+async function renameUser(id) {
+  const name = prompt('Nuevo nombre de usuario (mín. 3 caracteres). Tendrá que usarlo para entrar.', state.users?.[id] || '');
+  if (!name || name.trim() === state.users?.[id]) return;
+  try { await api(`/api/users/${id}`, {method: 'PATCH', body: {username: name.trim()}}); toast('Usuario renombrado'); loadUsers(); loadSide(); }
+  catch (e) { toast(e.message); }
 }
 async function delUser(id) {
-  if (!confirm('¿Eliminar este usuario? Sus campañas y leads pasarán a tu cuenta.')) return;
-  try { await api(`/api/users/${id}`, {method: 'DELETE'}); toast('Usuario eliminado'); loadUsers(); loadSide(); } catch (e) { toast(e.message); }
+  if (!confirm(`¿Eliminar a ${state.users?.[id] || 'este usuario'}? Sus campañas y leads pasarán a tu cuenta. Si solo quieres quitarle el acceso, usa Desactivar.`)) return;
+  try { await api(`/api/users/${id}`, {method: 'DELETE'}); toast('Usuario eliminado'); if (usersOpen === id) usersOpen = null; loadUsers(); loadSide(); } catch (e) { toast(e.message); }
 }
 async function resetUserPassword(id) {
-  const pw = prompt(`Nueva contraseña para ${state.users?.[id] || 'este usuario'} (mín. 8 caracteres). Se cerrarán sus sesiones abiertas.`);
+  const pw = prompt(`Nueva contraseña para ${state.users?.[id] || 'este usuario'} (mín. 8 caracteres). Se cerrarán sus sesiones abiertas.`, randomPassword());
   if (!pw) return;
-  try { await api(`/api/users/${id}/password`, {method: 'POST', body: {password: pw}}); toast('Contraseña restablecida'); } catch (e) { toast(e.message); }
+  try { await api(`/api/users/${id}/password`, {method: 'POST', body: {password: pw}}); toast('Contraseña restablecida'); loadUsers(); } catch (e) { toast(e.message); }
 }
 
 function closeModals() { document.querySelectorAll('.modal-bg').forEach(m => m.classList.remove('open')); syncOverlays(); }
@@ -478,6 +641,7 @@ document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', 
 async function init() {
   try { state.me = await api('/api/me'); } catch { return; }
   $('#whoName').textContent = state.me.username + (state.me.is_admin ? ' · admin' : '');
+  $('#navUsers').hidden = !state.me.is_admin;
   state.settings = await api('/api/settings');
   const cs = await loadSide();
   if (state.cid) return renderCampaign();
@@ -596,7 +760,8 @@ function setView(label) {
   $('#viewLabel').textContent=label;
   $('#navCompanies').classList.toggle('active',label==='Empresas');
   $('#navLeads').classList.toggle('active',label==='Todos los leads');
-  [$('#navCompanies'),$('#navLeads')].forEach(b=>b.classList.contains('active')?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current'));
+  $('#navUsers').classList.toggle('active',label==='Usuarios');
+  [$('#navCompanies'),$('#navLeads'),$('#navUsers')].forEach(b=>b.classList.contains('active')?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current'));
 }
 function updateFilterCount() {
   const n=[F.sales_profile,F.opportunity,F.tag,F.min_priority].filter(Boolean).length;
@@ -644,7 +809,7 @@ document.addEventListener('keydown',e=>{
   else if(!e.shiftKey&&(document.activeElement===nodes.at(-1)||!activeOverlay.contains(document.activeElement))) {e.preventDefault();nodes[0].focus();}
 });
 const uiObserver=new MutationObserver(syncOverlays);
-['newModal','setModal','pwModal','loginBg','drawer'].forEach(id=>uiObserver.observe($('#'+id),{attributes:true,attributeFilter:['class']}));
+['newModal','setModal','pwModal','schModal','userModal','loginBg','drawer'].forEach(id=>uiObserver.observe($('#'+id),{attributes:true,attributeFilter:['class']}));
 uiObserver.observe($('#drawer'),{childList:true});
 syncOverlays();
 syncSidebar();

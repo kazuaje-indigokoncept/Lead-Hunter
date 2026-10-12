@@ -117,6 +117,12 @@ def init():
             if "owner_id" not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
                 c.execute(f"ALTER TABLE {table} ADD COLUMN owner_id INTEGER")
             c.execute(f"CREATE INDEX IF NOT EXISTS {table}_owner ON {table}(owner_id)")
+        # Ejecución por tandas: búsqueda por la que va, próxima tanda y errores seguidos.
+        camp_cols = {r[1] for r in c.execute("PRAGMA table_info(campaigns)")}
+        for name, ddl in (("next_run_at", "REAL"), ("batch_cursor", "INTEGER NOT NULL DEFAULT 0"),
+                          ("batch_errors", "INTEGER NOT NULL DEFAULT 0")):
+            if name not in camp_cols:
+                c.execute(f"ALTER TABLE campaigns ADD COLUMN {name} {ddl}")
 
 
 def assign_orphans():

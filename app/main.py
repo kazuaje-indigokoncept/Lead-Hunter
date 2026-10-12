@@ -1,8 +1,10 @@
 """LeadHunter - servidor web (FastAPI)."""
+import asyncio
 import csv
 import io
 import os
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -18,7 +20,20 @@ from .enrich import website, linkedin, instagram_public
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 SECURE_COOKIE = os.getenv("SECURE_COOKIE", "0") == "1"
-app = FastAPI(title="LeadHunter", docs_url=None, redoc_url=None, openapi_url=None)
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    # Reanuda lo interrumpido por un reinicio y arranca el programador de tandas.
+    jobs.recover()
+    task = asyncio.create_task(jobs.scheduler_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+
+
+app = FastAPI(title="LeadHunter", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 db.init()
 auth.init()
@@ -96,9 +111,50 @@ class UserIn(BaseModel):
 
 @app.get("/api/users", dependencies=[Depends(auth.require_admin)])
 def list_users():
-    return db.query("""SELECT u.id, u.username, u.is_admin, u.created_at,
-        (SELECT COUNT(*) FROM campaigns c WHERE c.owner_id = u.id) AS campaign_count
-        FROM users u ORDER BY u.id""")
+    return db.query("""SELECT u.id, u.username, u.is_admin, u.active, u.created_at, u.last_login,
+        (SELECT COUNT(*) FROM campaigns c WHERE c.owner_id = u.id) AS campaign_count,
+        (SELECT COUNT(*) FROM campaigns c WHERE c.owner_id = u.id AND c.status IN ('programada','en curso')) AS active_campaigns,
+        (SELECT COUNT(*) FROM leads l JOIN campaigns c ON c.id = l.campaign_id WHERE c.owner_id = u.id) AS lead_count,
+        (SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id AND s.expires > CAST(strftime('%s','now') AS REAL)) AS open_sessions
+        FROM users u ORDER BY u.is_admin DESC, u.username COLLATE NOCASE""")
+
+
+class UserPatch(BaseModel):
+    username: str | None = None
+    is_admin: bool | None = None
+    active: bool | None = None
+
+
+@app.patch("/api/users/{uid}")
+def update_user(uid: int, body: UserPatch, admin=Depends(auth.require_admin)):
+    user = db.one("SELECT * FROM users WHERE id = ?", (uid,))
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+    upd = {}
+    if body.username is not None and body.username.strip() != user["username"]:
+        name = body.username.strip()
+        if len(name) < 3:
+            raise HTTPException(400, "El usuario debe tener mín. 3 caracteres.")
+        if db.one("SELECT id FROM users WHERE username = ? AND id != ?", (name, uid)):
+            raise HTTPException(400, "Ese usuario ya existe.")
+        upd["username"] = name
+    for field in ("is_admin", "active"):
+        value = getattr(body, field)
+        if value is None or int(value) == user[field]:
+            continue
+        if uid == admin["id"]:
+            raise HTTPException(400, "No puedes quitarte el rol de administrador ni desactivarte a ti mismo.")
+        upd[field] = int(value)
+    if not upd:
+        return {"ok": True}
+    if user["is_admin"] and user["active"] and (upd.get("is_admin") == 0 or upd.get("active") == 0):
+        others = db.one("SELECT COUNT(*) n FROM users WHERE is_admin = 1 AND active = 1 AND id != ?", (uid,))["n"]
+        if not others:
+            raise HTTPException(400, "Debe quedar al menos un administrador activo.")
+    db.update("users", uid, upd)
+    if upd.get("active") == 0:
+        db.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
+    return {"ok": True}
 
 
 @app.post("/api/users", dependencies=[Depends(auth.require_admin)])
@@ -205,10 +261,27 @@ class CampaignIn(BaseModel):
         delay = opts.get("maps_delay", 2)
         if isinstance(delay, bool) or not isinstance(delay, (int, float)) or not 1 <= delay <= 30:
             raise ValueError("maps_delay debe estar entre 1 y 30 segundos")
+        schedule = opts.get("schedule")
+        if schedule is not None:
+            opts["schedule"] = validate_schedule(schedule)
         rating = opts.get("min_rating")
         if rating is not None and (isinstance(rating, bool) or not isinstance(rating, (int, float)) or not 0 <= rating <= 5):
             raise ValueError("Rating mínimo debe estar entre 0 y 5")
         return opts
+
+
+def validate_schedule(sch):
+    if not isinstance(sch, dict):
+        raise ValueError("Programación inválida")
+    interval, per_batch = sch.get("interval_minutes", 60), sch.get("combos_per_batch", 1)
+    for value in (interval, per_batch):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("La programación usa números enteros")
+    if not jobs.MIN_INTERVAL <= interval <= jobs.MAX_INTERVAL:
+        raise ValueError(f"El intervalo debe estar entre {jobs.MIN_INTERVAL} minutos y 7 días")
+    if not 1 <= per_batch <= jobs.MAX_COMBOS_PER_BATCH:
+        raise ValueError(f"Las búsquedas por tanda deben estar entre 1 y {jobs.MAX_COMBOS_PER_BATCH}")
+    return {"enabled": bool(sch.get("enabled")), "interval_minutes": interval, "combos_per_batch": per_batch}
 
 
 def _clean(lst):
@@ -229,18 +302,31 @@ def estimate(c: CampaignIn):
             "max_cost_usd": round(calls * price / 1000, 2)}
 
 
+def _schedule_info(c):
+    sch = jobs.schedule_of(c)
+    total = len(c["keywords"]) * len(c["locations"])
+    return {"schedule": sch, "total_combos": total, "batch_cursor": c.get("batch_cursor") or 0,
+            "next_run_at": c.get("next_run_at"),
+            "batches_total": -(-total // sch["combos_per_batch"]) if sch["enabled"] else 1}
+
+
 @app.get("/api/campaigns")
-def list_campaigns(request: Request):
+def list_campaigns(request: Request, owner_id: int | None = None):
     user = _user(request)
     scope, params = _owner_scope(user, "c.owner_id")
+    if owner_id and user["is_admin"]:
+        scope, params = "c.owner_id = ?", [owner_id]
     rows = db.query(f"""SELECT c.id, c.name, c.client, c.status, c.progress, c.api_calls,
-        c.created_at, c.keywords, c.locations, c.sources, c.owner_id,
+        c.created_at, c.keywords, c.locations, c.sources, c.owner_id, c.options,
+        c.next_run_at, c.batch_cursor,
         (SELECT username FROM users u WHERE u.id = c.owner_id) AS owner_name,
         (SELECT COUNT(*) FROM leads l WHERE l.campaign_id = c.id) AS total,
         (SELECT COUNT(*) FROM leads l WHERE l.campaign_id = c.id AND l.emails != '[]') AS with_email
         FROM campaigns c WHERE {scope} ORDER BY c.id DESC""", tuple(params))
     for r in rows:
         r["running"] = r["id"] in jobs.RUNNING
+        r.update(_schedule_info(r))
+        r.pop("options", None)
     return rows
 
 
@@ -272,6 +358,7 @@ def get_campaign(cid: int, request: Request):
     c["running"] = cid in jobs.RUNNING
     owner = db.one("SELECT username FROM users WHERE id = ?", (c["owner_id"],))
     c["owner_name"] = owner["username"] if owner else ""
+    c.update(_schedule_info(c))
     s = db.one("""SELECT COUNT(*) total,
         SUM(emails != '[]') email, SUM(whatsapp IS NOT NULL AND whatsapp != '') wa,
         SUM(phone IS NOT NULL AND phone != '') phone,
@@ -302,6 +389,30 @@ def delete_campaign(cid: int, request: Request):
     db.execute("DELETE FROM leads WHERE campaign_id = ?", (cid,))
     db.execute("DELETE FROM campaigns WHERE id = ?", (cid,))
     return {"ok": True}
+
+
+class ScheduleIn(BaseModel):
+    enabled: bool
+    interval_minutes: int = 60
+    combos_per_batch: int = 1
+
+
+@app.put("/api/campaigns/{cid}/schedule")
+def set_schedule(cid: int, body: ScheduleIn, request: Request):
+    c = _campaign(cid, _user(request))
+    try:
+        sch = validate_schedule(body.model_dump())
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    db.update("campaigns", cid, {"options": {**c["options"], "schedule": sch}})
+    if cid not in jobs.RUNNING:
+        if not sch["enabled"] and c["status"] in ("programada", "pausada"):
+            db.update("campaigns", cid, {"status": "detenida", "next_run_at": None})
+        elif sch["enabled"] and c["status"] == "programada" and c.get("next_run_at"):
+            # Un intervalo más corto adelanta la próxima tanda; uno más largo la retrasa.
+            last = c["next_run_at"] - jobs.schedule_of(c)["interval_minutes"] * 60
+            db.update("campaigns", cid, {"next_run_at": max(last + sch["interval_minutes"] * 60, 0)})
+    return get_campaign(cid, request)
 
 
 # ---------------- leads ----------------

@@ -48,6 +48,11 @@ def check_pw(pw: str, stored: str) -> bool:
 def init():
     with db.connect() as c:
         c.executescript(SCHEMA)
+        cols = {r[1] for r in c.execute("PRAGMA table_info(users)")}
+        if "active" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
+        if "last_login" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
     if db.one("SELECT COUNT(*) n FROM users")["n"] == 0:
         user = os.getenv("ADMIN_USER", "admin")
         pw = os.getenv("ADMIN_PASSWORD")
@@ -76,7 +81,7 @@ def _reset_admin_from_env():
         return
     u = db.one("SELECT id FROM users WHERE username = ?", (user,))
     if u:
-        db.execute("UPDATE users SET pw_hash = ?, is_admin = 1 WHERE id = ?",
+        db.execute("UPDATE users SET pw_hash = ?, is_admin = 1, active = 1 WHERE id = ?",
                    (hash_pw(pw), u["id"]))
         db.execute("DELETE FROM sessions WHERE user_id = ?", (u["id"],))
     else:
@@ -109,7 +114,10 @@ def login(req: Request, username: str, pw: str) -> str:
     if not u or not check_pw(pw, u["pw_hash"]):
         _fails[ip].append(now)
         raise HTTPException(401, "Usuario o contraseña incorrectos.")
+    if not u["active"]:
+        raise HTTPException(403, "Tu usuario está desactivado. Habla con el administrador.")
     _fails.pop(ip, None)
+    db.execute("UPDATE users SET last_login = datetime('now','localtime') WHERE id = ?", (u["id"],))
     token = secrets.token_urlsafe(32)
     db.execute("DELETE FROM sessions WHERE expires < ?", (now,))
     db.execute("INSERT INTO sessions(token, user_id, expires) VALUES(?,?,?)",
@@ -127,7 +135,7 @@ def current_user(req: Request):
         return None
     return db.one("""SELECT u.id, u.username, u.is_admin FROM sessions s
                      JOIN users u ON u.id = s.user_id
-                     WHERE s.token = ? AND s.expires > ?""", (token, time.time()))
+                     WHERE s.token = ? AND s.expires > ? AND u.active = 1""", (token, time.time()))
 
 
 def require_admin(req: Request):

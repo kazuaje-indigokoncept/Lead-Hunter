@@ -2,6 +2,7 @@
 import asyncio
 import json
 import random
+import time
 import traceback
 import unicodedata
 from datetime import datetime
@@ -14,6 +15,30 @@ from .sources import maps_web, places, rues
 
 RUNNING: dict[int, asyncio.Task] = {}
 STOP_REQUESTED: set[int] = set()
+BATCH_RUNNING: set[int] = set()     # campañas ejecutando una tanda programada
+
+# Límites de la programación por tandas.
+MIN_INTERVAL, MAX_INTERVAL = 5, 7 * 24 * 60        # minutos
+MAX_COMBOS_PER_BATCH = 50
+MAX_BATCH_ERRORS = 3          # errores seguidos antes de dejar la campaña en "error"
+SCHEDULER_TICK = 30           # segundos entre revisiones del programador
+
+
+def schedule_of(camp) -> dict:
+    """Programación de la campaña con valores por defecto. enabled=False → todo de una vez."""
+    sch = (camp.get("options") or {}).get("schedule") or {}
+    return {"enabled": bool(sch.get("enabled")),
+            "interval_minutes": int(sch.get("interval_minutes", 60)),
+            "combos_per_batch": int(sch.get("combos_per_batch", 1))}
+
+
+def combos_of(camp) -> list[tuple[str, str]]:
+    return [(k, l) for k in camp["keywords"] for l in camp["locations"]]
+
+
+def next_delay(minutes: int) -> float:
+    """Intervalo en segundos con ±15 % de variación para no repetir un patrón fijo."""
+    return minutes * 60 * random.uniform(0.85, 1.15)
 
 
 def score(lead: dict) -> int:
@@ -92,14 +117,20 @@ async def enrich_instagram(client, lead, *, mode="web", demo=False, token="", ig
 
 
 class Runner:
-    def __init__(self, cid: int):
+    def __init__(self, cid: int, batch: tuple[int, int] | None = None):
         self.cid = cid
         self.camp = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
         self.opts = self.camp["options"] or {}
+        self.all_combos = combos_of(self.camp)
+        # batch = (inicio, fin) sobre la lista de búsquedas; None = campaña completa.
+        self.batch = batch
+        self.combos = self.all_combos[batch[0]:batch[1]] if batch else self.all_combos
+        self.touched: set[int] = set()   # leads guardados en esta ejecución
         self.demo = db.get_setting("demo_mode", "1") == "1"
         self.gkey = db.get_setting("google_api_key")
         self.calls = self.camp.get("api_calls", 0)
-        self.log_lines = []
+        # Las tandas continúan el registro anterior en vez de borrarlo.
+        self.log_lines = list(self.camp.get("log") or []) if batch else []
         self.maps_mode = self.opts.get("maps_mode", "api")
 
     def check_stop(self):
@@ -113,8 +144,19 @@ class Runner:
         db.update("campaigns", self.cid, {"log": self.log_lines[-200:]})
 
     def progress(self, p, status="en curso"):
-        db.update("campaigns", self.cid, {"progress": round(p, 3), "status": status,
+        if self.batch:
+            # Progreso de la tanda llevado al total de la campaña.
+            total = max(len(self.all_combos), 1)
+            p = (self.batch[0] + p * (self.batch[1] - self.batch[0])) / total
+        db.update("campaigns", self.cid, {"progress": round(min(p, 1), 3), "status": status,
                                           "api_calls": self.calls})
+
+    def scope(self, sql: str) -> tuple[str, tuple]:
+        """En una tanda, el enriquecimiento se limita a los leads encontrados en ella."""
+        if not self.batch:
+            return sql, ()
+        ids = sorted(self.touched) or [0]
+        return sql + f" AND id IN ({','.join('?' * len(ids))})", tuple(ids)
 
     def count_call(self):
         self.calls += 1
@@ -138,6 +180,7 @@ class Runner:
         else:
             db.insert("leads", lead)
         saved = db.one("SELECT * FROM leads WHERE campaign_id=? AND dedupe_key=?", (self.cid, lead["dedupe_key"]))
+        self.touched.add(saved["id"])
         companies.attach(saved)
 
     # ---------- fases ----------
@@ -145,6 +188,10 @@ class Runner:
         kws, locs, srcs = self.camp["keywords"], self.camp["locations"], self.camp["sources"]
         phases = [s for s in ("google_maps", "rues", "website", "linkedin", "instagram")
                   if s in srcs or (s == "website" and any(net in srcs for net in ("linkedin", "instagram")))]
+        if self.batch:
+            first, last = self.batch
+            self.log(f"Tanda: búsquedas {first + 1}–{last} de {len(self.all_combos)} · "
+                     + ", ".join(f"'{k} en {l}'" for k, l in self.combos))
         self.log(f"Inicio. Modo {'DEMO' if self.demo else 'REAL'}. Fuentes: {', '.join(phases)}")
         if not self.demo and "google_maps" in srcs and self.maps_mode == "api" and not self.gkey:
             raise RuntimeError("Falta la API key de Google (Ajustes).")
@@ -157,6 +204,10 @@ class Runner:
                 await getattr(self, f"phase_{ph}")(client, kws, locs, base, span)
         total = db.one("SELECT COUNT(*) n FROM leads WHERE campaign_id = ?", (self.cid,))["n"]
         self.check_stop()
+        if self.batch:
+            self.log(f"Tanda terminada: {len(self.touched)} leads en esta tanda, {total} en total.")
+            self.progress(1, "en curso")
+            return
         self.log(f"Terminado: {total} leads, {self.calls} llamadas a Google.")
         self.progress(1, "terminada")
 
@@ -164,7 +215,7 @@ class Runner:
         if not self.demo and self.maps_mode == "web":
             await self.phase_maps_web(kws, locs, base, span)
             return
-        combos = [(k, l) for k in kws for l in locs]
+        combos = self.combos
         pages = int(self.opts.get("max_pages", 3))
         min_rating = self.opts.get("min_rating") or None
         for j, (k, l) in enumerate(combos):
@@ -190,7 +241,7 @@ class Runner:
             self.progress(base + span * (j + 1) / len(combos))
 
     async def phase_maps_web(self, kws, locs, base, span):
-        combos = [(k, l) for k in kws for l in locs]
+        combos = self.combos
         limit = int(self.opts.get("maps_max_results", 40))
         self.log(f"Google Maps sin API · hasta {limit} fichas por consulta. No consume llamadas a Places.")
         async with maps_web.MapsBrowser(log=self.log, check_stop=self.check_stop) as browser:
@@ -213,7 +264,7 @@ class Runner:
                 self.progress(base + span * (j + 1) / len(combos))
 
     async def phase_rues(self, client, kws, locs, base, span):
-        combos = [(k, l) for k in kws for l in locs]
+        combos = self.combos
         since = self.opts.get("rues_since", "")
         ciiu = self.opts.get("rues_ciiu", "")
         cross = self.opts.get("rues_cross_maps", False)
@@ -251,8 +302,9 @@ class Runner:
         return res[0] if res else None
 
     async def phase_website(self, client, kws, locs, base, span):
-        leads = db.query("SELECT * FROM leads WHERE campaign_id = ? AND website IS NOT NULL "
-                         "AND website != '' AND (enriched = 0 OR web_audit = '{}')", (self.cid,))
+        sql, extra = self.scope("SELECT * FROM leads WHERE campaign_id = ? AND website IS NOT NULL "
+                                "AND website != '' AND (enriched = 0 OR web_audit = '{}')")
+        leads = db.query(sql, (self.cid,) + extra)
         self.log(f"Visitando {len(leads)} sitios web…")
         sem = asyncio.Semaphore(int(self.opts.get("concurrency", 8)))
         done = 0
@@ -272,7 +324,8 @@ class Runner:
         self.progress(base + span)
 
     async def phase_linkedin(self, client, kws, locs, base, span):
-        leads = db.query("SELECT * FROM leads WHERE campaign_id = ? AND linkedin IS NOT NULL AND linkedin != ''", (self.cid,))
+        sql, extra = self.scope("SELECT * FROM leads WHERE campaign_id = ? AND linkedin IS NOT NULL AND linkedin != ''")
+        leads = db.query(sql, (self.cid,) + extra)
         self.log(f"LinkedIn: {len(leads)} enlaces encontrados; consulta pública de empresas con comprobación de robots.txt.")
         for j, lead in enumerate(leads):
             self.check_stop()
@@ -285,7 +338,8 @@ class Runner:
                 self.progress(base + span)
                 return
             await asyncio.sleep(0.05 if self.demo else 2)
-        company_ids = [r["company_id"] for r in db.query("SELECT DISTINCT company_id FROM leads WHERE campaign_id=? AND company_id IS NOT NULL", (self.cid,))]
+        sql, extra = self.scope("SELECT DISTINCT company_id FROM leads WHERE campaign_id=? AND company_id IS NOT NULL")
+        company_ids = [r["company_id"] for r in db.query(sql, (self.cid,) + extra)]
         self.log(f"Buscando responsables asociados a {len(company_ids)} empresas; hasta 15 perfiles públicos por empresa.")
         for index, cid in enumerate(company_ids):
             self.check_stop()
@@ -305,8 +359,9 @@ class Runner:
             self.log("Instagram omitido: faltan token de Meta / ID de cuenta IG en Ajustes.")
             self.progress(base + span)
             return
-        leads = db.query("SELECT * FROM leads WHERE campaign_id = ? AND instagram IS NOT NULL "
-                         "AND instagram != ''", (self.cid,))
+        sql, extra = self.scope("SELECT * FROM leads WHERE campaign_id = ? AND instagram IS NOT NULL "
+                                "AND instagram != ''")
+        leads = db.query(sql, (self.cid,) + extra)
         self.log(f"Instagram {'público sin API' if mode == 'web' else 'API de Meta'}: {len(leads)} perfiles encontrados en las webs o añadidos manualmente.")
         for j, lead in enumerate(leads):
             self.check_stop()
@@ -339,9 +394,65 @@ async def run_campaign(cid: int):
         STOP_REQUESTED.discard(cid)
 
 
+async def run_batch(cid: int):
+    """Ejecuta la siguiente tanda de búsquedas y programa la siguiente."""
+    camp = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
+    sch, total = schedule_of(camp), len(combos_of(camp))
+    first = min(camp.get("batch_cursor") or 0, total)
+    last = min(first + sch["combos_per_batch"], total)
+    r = Runner(cid, (first, last))
+    try:
+        await r.run()
+    except asyncio.CancelledError:
+        r.log("Programación pausada por el usuario. Pulsa Reanudar para continuar.")
+        db.update("campaigns", cid, {"status": "pausada", "next_run_at": None})
+        return
+    except Exception as e:  # noqa: BLE001
+        traceback.print_exc()
+        errors = (camp.get("batch_errors") or 0) + 1
+        if errors >= MAX_BATCH_ERRORS:
+            r.log(f"ERROR: {e}. {errors} tandas seguidas con error: programación detenida.")
+            db.update("campaigns", cid, {"status": "error", "next_run_at": None, "batch_errors": errors})
+        else:
+            # Ante un bloqueo o fallo se espera el doble antes de repetir la misma tanda.
+            wait = next_delay(sch["interval_minutes"] * 2)
+            r.log(f"ERROR: {e}. Se repetirá esta tanda en {round(wait / 60)} min.")
+            db.update("campaigns", cid, {"status": "programada", "next_run_at": time.time() + wait,
+                                         "batch_errors": errors})
+        return
+    finally:
+        RUNNING.pop(cid, None)
+        BATCH_RUNNING.discard(cid)
+        STOP_REQUESTED.discard(cid)
+    if last >= total:
+        r.log(f"Campaña completada: {total} búsquedas procesadas en tandas.")
+        db.update("campaigns", cid, {"status": "terminada", "progress": 1, "batch_cursor": total,
+                                     "next_run_at": None, "batch_errors": 0})
+    else:
+        wait = next_delay(sch["interval_minutes"])
+        when = datetime.fromtimestamp(time.time() + wait)
+        r.log(f"Próxima tanda hacia las {when:%H:%M} ({last} de {total} búsquedas hechas).")
+        db.update("campaigns", cid, {"status": "programada", "batch_cursor": last, "batch_errors": 0,
+                                     "next_run_at": time.time() + wait})
+
+
+def _launch_batch(cid: int):
+    BATCH_RUNNING.add(cid)
+    RUNNING[cid] = asyncio.create_task(run_batch(cid))
+
+
 def start(cid: int):
+    """Ejecuta la campaña completa o, si está programada, su siguiente tanda ahora."""
     if cid in RUNNING:
         return False
+    camp = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
+    if camp and schedule_of(camp)["enabled"]:
+        if (camp.get("batch_cursor") or 0) >= len(combos_of(camp)):
+            # Campaña ya completada: se vuelve a recorrer desde la primera búsqueda.
+            db.update("campaigns", cid, {"batch_cursor": 0, "progress": 0})
+        db.update("campaigns", cid, {"status": "en curso", "batch_errors": 0})
+        _launch_batch(cid)
+        return True
     RUNNING[cid] = asyncio.create_task(run_campaign(cid))
     return True
 
@@ -356,7 +467,45 @@ def stop(cid: int):
         else:
             t.cancel()
         return True
+    camp = db.one("SELECT status FROM campaigns WHERE id = ?", (cid,))
+    if camp and camp["status"] == "programada":
+        # Esperando la siguiente tanda: se pausa sin tocar lo ya encontrado.
+        db.update("campaigns", cid, {"status": "pausada", "next_run_at": None})
+        return True
     return False
+
+
+def scheduler_tick():
+    """Lanza la tanda vencida más antigua. Solo una tanda programada a la vez."""
+    if BATCH_RUNNING:
+        return None
+    due = db.one("SELECT id FROM campaigns WHERE status = 'programada' AND next_run_at IS NOT NULL "
+                 "AND next_run_at <= ? ORDER BY next_run_at LIMIT 1", (time.time(),))
+    if not due or due["id"] in RUNNING:
+        return None
+    db.update("campaigns", due["id"], {"status": "en curso"})
+    _launch_batch(due["id"])
+    return due["id"]
+
+
+async def scheduler_loop():
+    while True:
+        try:
+            scheduler_tick()
+        except Exception:  # noqa: BLE001 - el programador no debe detenerse por un fallo puntual
+            traceback.print_exc()
+        await asyncio.sleep(SCHEDULER_TICK)
+
+
+def recover():
+    """Tras un reinicio, ninguna campaña sigue realmente en curso."""
+    for c in db.query("SELECT id, options, log FROM campaigns WHERE status = 'en curso'"):
+        log = (c["log"] or []) + [f"{datetime.now():%H:%M:%S} Interrumpida por un reinicio del servidor."]
+        if schedule_of(c)["enabled"]:
+            # Se repite la tanda interrumpida en cuanto el programador arranque.
+            db.update("campaigns", c["id"], {"status": "programada", "next_run_at": time.time(), "log": log[-200:]})
+        else:
+            db.update("campaigns", c["id"], {"status": "detenida", "log": log[-200:]})
 
 
 # ---------------- datos de demostración ----------------
