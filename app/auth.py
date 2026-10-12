@@ -56,6 +56,33 @@ def init():
             print(f"\n*** Usuario inicial: {user}  contraseña: {pw}  (cámbiala al entrar) ***\n",
                   flush=True)
         create_user(user, pw, admin=True)
+    _reset_admin_from_env()
+
+
+def _reset_admin_from_env():
+    """Restablece la contraseña del administrador si RESET_ADMIN_PASSWORD está definida.
+
+    Pensado para recuperar el acceso desde las variables del servidor (p. ej. Railway).
+    Cierra las sesiones abiertas de ese usuario. Quita la variable después de entrar:
+    mientras exista, la contraseña se vuelve a fijar en cada arranque.
+    """
+    pw = os.getenv("RESET_ADMIN_PASSWORD")
+    if not pw:
+        return
+    user = os.getenv("ADMIN_USER", "admin").strip()
+    if len(pw) < 8 or len(user) < 3:
+        print("\n*** RESET_ADMIN_PASSWORD ignorada: la contraseña debe tener al menos "
+              "8 caracteres y el usuario al menos 3. ***\n", flush=True)
+        return
+    u = db.one("SELECT id FROM users WHERE username = ?", (user,))
+    if u:
+        db.execute("UPDATE users SET pw_hash = ?, is_admin = 1 WHERE id = ?",
+                   (hash_pw(pw), u["id"]))
+        db.execute("DELETE FROM sessions WHERE user_id = ?", (u["id"],))
+    else:
+        create_user(user, pw, admin=True)
+    print(f"\n*** Contraseña del administrador '{user}' restablecida desde "
+          "RESET_ADMIN_PASSWORD. Elimina esa variable después de entrar. ***\n", flush=True)
 
 
 def create_user(username: str, pw: str, admin: bool = False):
