@@ -1,0 +1,8 @@
+# SITE_ADDRESS viene del archivo .env
+#   - con HTTPS automático:  1-2-3-4.sslip.io   o   leads.tudominio.com
+#   - sin HTTPS (no recomendado):  :80
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy app:8000
+	header Strict-Transport-Security "max-age=31536000"
+}

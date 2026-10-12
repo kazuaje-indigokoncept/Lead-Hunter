@@ -1,0 +1,14 @@
+{
+  "name": "leadhunter-ui",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "test:ui": "node tests/drawer_overlay.test.cjs",
+    "build:css": "tailwindcss -i ./ui/styles.css -o ./static/app.css --minify",
+    "watch:css": "tailwindcss -i ./ui/styles.css -o ./static/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.0",
+    "tailwindcss": "4.3.0"
+  }
+}

@@ -1,0 +1,8 @@
+.env
+.venv/
+.browsers/
+__pycache__/
+data/
+logs/
+node_modules/
+.test-*/

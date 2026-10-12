@@ -1,0 +1,13 @@
+# Versión para probar en tu PC con Docker Desktop (sin Caddy ni HTTPS)
+# Uso: docker compose -f docker-compose.local.yml up -d --build
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    shm_size: '1gb'
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8000:8000"   # solo accesible desde este PC

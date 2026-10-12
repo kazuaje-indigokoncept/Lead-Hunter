@@ -1,0 +1,168 @@
+@import "tailwindcss";
+@source "../static/index.html";
+@theme {
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --font-sans: "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+}
+@layer base {
+  :root { --accent:#4f46e5; --muted:#64748b; --line:#e2e8f0; --ink:#0f172a; --bad:#be123c; }
+  body { @apply m-0 overflow-x-hidden bg-slate-50 text-sm text-slate-800 antialiased; }
+  button, input, select, textarea { font:inherit; }
+  button, a, summary { -webkit-tap-highlight-color: transparent; }
+  button:not(:disabled), summary { cursor:pointer; }
+  a { @apply text-brand-600 hover:text-brand-700; }
+  button:disabled { @apply cursor-not-allowed opacity-40; }
+  :focus-visible { @apply outline-2 outline-offset-4 outline-brand-500; }
+  h1 { @apply text-3xl font-semibold tracking-tight text-slate-950; }
+  h2 { @apply text-xl font-semibold tracking-tight text-slate-900; }
+  h3 { @apply mt-6 mb-3 text-sm font-semibold text-slate-900; }
+  input[type=text], input[type=search], input[type=password], input[type=number], input[type=email], select, textarea {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 shadow-xs transition placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-3 focus:ring-brand-100;
+  }
+  input[type=checkbox] { @apply size-4 shrink-0 accent-brand-600; }
+  summary { @apply text-sm font-medium text-slate-600; }
+  details[open] > summary { @apply mb-3; }
+}
+@layer components {
+  .app { @apply min-h-screen; }
+  .sidebar { @apply fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-slate-200 bg-white px-4 py-6; }
+  .brand { @apply mb-7 flex items-center gap-3 px-2 text-xl font-bold tracking-tight text-slate-950; }
+  .brand-mark { @apply flex size-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-md shadow-brand-100; }
+  .brand-mark svg { @apply size-5; }
+  .side-caption { @apply mt-7 mb-3 flex items-center justify-between px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400; }
+  .side-list { @apply min-h-0 flex-1 space-y-1 overflow-y-auto; }
+  .side-item { @apply flex w-full flex-col gap-1 rounded-xl border border-transparent px-3 py-3 text-left transition hover:bg-slate-50; }
+  .side-item.active { @apply border-brand-100 bg-brand-50; }
+  .side-item b { @apply block truncate text-[13px] font-semibold text-slate-700; }
+  .side-item.active b { @apply text-brand-700; }
+  .side-item small { @apply text-[11px] leading-relaxed text-slate-500; }
+  .nav-link { @apply flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[13px] font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900; }
+  .nav-link svg { @apply size-4 shrink-0; }
+  .nav-link.active { @apply bg-brand-50 font-semibold text-brand-700; }
+  .side-foot { @apply mt-4 border-t border-slate-100 pt-3; }
+  .who { @apply mt-3 flex flex-col gap-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-500; }
+  .who span:first-child { @apply font-semibold text-slate-700; }
+  .workspace { @apply min-w-0 lg:ml-64; }
+  .topbar { @apply sticky top-0 z-10 flex h-18 items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-5 backdrop-blur lg:px-8; }
+  .topbar-context { @apply flex items-center gap-3 text-xs text-slate-400; }
+  .topbar-context strong { @apply font-medium text-slate-600; }
+  .workspace-label { @apply hidden items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 sm:flex; }
+  .workspace-label i { @apply size-1.5 rounded-full bg-emerald-500; }
+  main { @apply mx-auto max-w-[1600px] p-5 lg:p-8; }
+  .head { @apply mb-7 flex flex-wrap items-start justify-between gap-5; }
+  .head h1 { @apply mb-2; }
+  .sub { @apply max-w-2xl text-[13px] leading-relaxed text-slate-500; }
+  .eyebrow { @apply mb-2 text-[10px] font-bold uppercase tracking-[0.17em] text-brand-600; }
+  .btn { @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 shadow-xs transition hover:border-slate-300 hover:bg-slate-50 active:translate-y-px; }
+  .btn.primary { @apply border-brand-600 bg-brand-600 text-white shadow-sm shadow-brand-100 hover:border-brand-700 hover:bg-brand-700; }
+  .btn.ghost { @apply border-transparent bg-transparent shadow-none hover:bg-slate-100; }
+  .btn.danger { @apply text-rose-700 hover:border-rose-200 hover:bg-rose-50; }
+  .btn.sm { @apply rounded-lg px-3 py-1.5 text-xs; }
+  .tiles { @apply mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6; }
+  .tile { @apply relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5; }
+  .tile .v { @apply mb-1 text-3xl font-semibold tracking-tight text-slate-900 tabular-nums; }
+  .tile .l { @apply text-xs font-medium text-slate-500; }
+  .tile:first-child { @apply border-brand-200 bg-brand-50; }
+  .tile:first-child .v { @apply text-brand-700; }
+  .card { @apply overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs; }
+  .card-title { @apply flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4; }
+  .card-title h2 { @apply text-sm font-semibold; }
+  .card-title p { @apply mt-1 text-xs text-slate-500; }
+  .progress { @apply mb-6 p-5; }
+  .bar { @apply my-3 h-1.5 overflow-hidden rounded-full bg-slate-100; }
+  .bar i { @apply block h-full rounded-full bg-brand-500 transition-all duration-500; }
+  .log { @apply max-h-28 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 font-mono text-[11px] leading-relaxed text-slate-500; }
+  .filters { @apply flex flex-wrap items-center gap-2.5 border-b border-slate-100 p-4; }
+  .filters input[type=search] { @apply min-w-48 flex-1; }
+  .filters select, .filters input[type=number] { @apply w-auto max-w-full; }
+  .advanced-filters { @apply border-b border-slate-100 px-4 py-3; }
+  .advanced-filters summary { @apply text-xs; }
+  .advanced-filters .filters { @apply border-0 px-0 pb-0; }
+  .chip { @apply inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50; }
+  .chip input { @apply size-3.5; }
+  .chip:has(input:checked) { @apply border-brand-200 bg-brand-50 text-brand-700; }
+  .table-wrap { @apply overflow-x-auto; }
+  table { @apply w-full border-collapse text-[13px]; }
+  th { @apply whitespace-nowrap border-b border-slate-200 bg-slate-50/70 px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500; }
+  td { @apply border-b border-slate-100 px-5 py-5 align-top; }
+  tr.row { @apply cursor-pointer; }
+  tr.row:hover td { @apply bg-brand-50/40; }
+  tr.row:focus-visible { outline-offset:-3px; }
+  .name { @apply mb-1 font-semibold text-slate-900; }
+  .muted { @apply text-xs leading-relaxed text-slate-500; }
+  .icons { @apply flex flex-wrap gap-1; }
+  .ic { @apply rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600; }
+  .ic.wa, .ic.em { @apply bg-emerald-50 text-emerald-700; }
+  .ic.ig { @apply bg-pink-50 text-pink-700; }
+  .ic.fb { @apply bg-blue-50 text-blue-700; }
+  .ic.nw { @apply bg-amber-50 text-amber-800; }
+  .lead-tags { @apply flex min-w-56 max-w-80 flex-wrap gap-1.5; }
+  .lead-tag { @apply rounded-md border px-2 py-1 text-[10px] font-medium leading-snug; }
+  .tag-present { @apply border-emerald-200 bg-emerald-50 text-emerald-800; }
+  .tag-missing { @apply border-amber-200 bg-amber-50 text-amber-800; }
+  .tag-unknown { @apply border-slate-200 bg-slate-50 text-slate-500; }
+  .tag-inferred { @apply border-yellow-200 bg-yellow-50 text-yellow-800; }
+  .opportunity { @apply mt-2 block text-xs text-brand-600; }
+  .evidence-item { @apply border-b border-slate-100 py-3 text-xs leading-relaxed break-words; overflow-wrap:anywhere; }
+  .insight-box { @apply my-5 rounded-xl border border-brand-100 bg-brand-50/60 p-4 text-xs leading-relaxed; }
+  .insight-box h3 { @apply mt-0; }
+  .score { @apply mb-1 inline-block min-w-14 rounded-lg bg-brand-50 px-2 py-1.5 text-center text-xs font-bold text-brand-700 tabular-nums; }
+  .s-hi { @apply bg-emerald-50 text-emerald-700; }
+  .s-md { @apply bg-amber-50 text-amber-800; }
+  .s-lo { @apply bg-slate-100 text-slate-500; }
+  .status { @apply inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600; }
+  .st-contactado { @apply bg-blue-50 text-blue-700; }
+  .st-interesado { @apply bg-emerald-50 text-emerald-700; }
+  .st-descartado { @apply bg-rose-50 text-rose-700; }
+  .pager { @apply flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-xs text-slate-500; }
+  .pager > span:last-child { @apply flex items-center gap-3; }
+  .empty { @apply px-5 py-16 text-center text-sm leading-relaxed text-slate-500; }
+  .empty h2 { @apply mb-2; }
+  .empty p { @apply mx-auto my-4 max-w-xl; }
+  .modal-bg { @apply fixed inset-0 z-40 hidden items-start justify-center overflow-y-auto bg-slate-950/40 px-4 py-10 backdrop-blur-sm; }
+  .modal-bg.open { @apply flex; }
+  .modal { @apply w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl sm:p-8; }
+  .modal h2 { @apply mb-6; }
+  .field { @apply mb-4; }
+  .field label { @apply mb-2 block text-xs font-semibold text-slate-700; }
+  .field .hint { @apply mt-2 text-xs leading-relaxed text-slate-500; }
+  .grid2, .srcs { @apply grid grid-cols-1 gap-3 sm:grid-cols-2; }
+  .src { @apply flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4; }
+  .src:has(input:checked) { @apply border-brand-200 bg-brand-50/70; }
+  .src b { @apply mb-1 block text-xs font-semibold; }
+  .src small { @apply text-xs leading-relaxed text-slate-500; }
+  .estimate { @apply my-4 rounded-xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-500; }
+  .estimate b { @apply text-slate-800; }
+  .actions { @apply mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-5; }
+  .drawer { @apply invisible pointer-events-none fixed inset-y-0 right-0 z-30 w-full max-w-xl translate-x-full overflow-y-auto bg-white p-6 shadow-2xl transition-transform duration-200 sm:p-8; }
+  .drawer.open { @apply visible pointer-events-auto translate-x-0; }
+  .drawer-backdrop { @apply pointer-events-none fixed inset-0 z-20 hidden bg-slate-950/30 backdrop-blur-xs; }
+  .drawer-backdrop.open { @apply pointer-events-auto block; }
+  .kv { @apply my-5 grid grid-cols-[100px_1fr] gap-x-4 gap-y-3 text-xs leading-relaxed; }
+  .kv dt { @apply text-slate-500; }
+  .kv dd { @apply m-0 break-words; }
+  .demo-flag { @apply mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-800; }
+  .login-bg { @apply fixed inset-0 z-50 hidden items-center justify-center overflow-y-auto bg-slate-100 p-5; }
+  .login-bg.open { @apply flex; }
+  .login-shell { @apply grid w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl md:grid-cols-2; }
+  .login-story { @apply hidden flex-col justify-between bg-brand-600 p-10 text-white md:flex; }
+  .login { @apply w-full p-8 sm:p-10; }
+  .login h2 { @apply mb-2 text-2xl; }
+  .err { @apply my-3 min-h-4 text-xs text-rose-700; }
+  .user-row { @apply flex items-center justify-between border-b border-slate-100 py-3 text-xs; }
+  .toast { @apply fixed bottom-6 left-1/2 z-60 hidden max-w-[90vw] -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-sm text-white shadow-xl; }
+  .mobile-toggle { @apply lg:hidden; }
+  .mobile-backdrop { @apply fixed inset-0 z-20 hidden bg-slate-950/30; }
+  @media (max-width:1023px) {
+    .sidebar { @apply -translate-x-full transition-transform; }
+    .sidebar.mobile-open { @apply translate-x-0; }
+    .mobile-backdrop.open { @apply block; }
+    .head h1 { @apply text-2xl; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition:none!important; animation:none!important; scroll-behavior:auto!important; } }
+}

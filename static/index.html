@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeadHunter</title>
+<link rel="stylesheet" href="/static/app.css?v=7">
+</head>
+<body>
+<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-60 focus:rounded-lg focus:bg-white focus:p-3">Ir al contenido</a>
+<div class="app">
+  <div class="mobile-backdrop" id="mobileBackdrop" onclick="toggleSidebar(false)"></div>
+  <aside class="sidebar" id="sidebar" aria-label="Navegación principal">
+    <div class="brand"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M10 7v6M7 10h6"/></svg></span>LeadHunter<span class="ml-auto rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium tracking-wide text-slate-400">BETA</span><button class="ml-1 rounded-lg px-2 py-1 text-sm text-slate-400 lg:hidden" aria-label="Cerrar navegación" onclick="toggleSidebar(false)">✕</button></div>
+    <button class="btn primary w-full" onclick="openNew();toggleSidebar(false)">＋ Nueva búsqueda</button>
+    <div class="side-caption">Espacio de trabajo</div>
+    <nav class="space-y-1">
+      <button id="navCompanies" class="nav-link" onclick="allCompanies()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 21V4h10v17M14 10h6v11M2 21h20M7 8h4M7 12h4M7 16h4M17 14h1M17 17h1"/></svg>Empresas y responsables</button>
+      <button id="navLeads" class="nav-link" onclick="showAll()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h9M8 13h9M8 17h5"/></svg>Todos los leads</button>
+    </nav>
+    <div class="side-caption"><span>Campañas</span><span id="campaignCount" class="rounded-md bg-slate-100 px-1.5 py-0.5 tracking-normal">0</span></div>
+    <div class="side-list" id="sideList"></div>
+    <div class="side-foot"><button class="nav-link" onclick="openSettings();toggleSidebar(false)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" fill="white"/><circle cx="16" cy="12" r="2" fill="white"/><circle cx="10" cy="18" r="2" fill="white"/></svg>Ajustes del espacio</button></div>
+    <div class="who"><span id="whoName"></span><span class="flex justify-between"><button class="hover:text-brand-600" onclick="openPassword();toggleSidebar(false)">Contraseña</button><button class="hover:text-rose-600" onclick="doLogout()">Cerrar sesión ↗</button></span></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div class="topbar-context"><button class="btn ghost sm mobile-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Abrir navegación" aria-controls="sidebar" aria-expanded="false">☰</button><span class="hidden sm:inline">Espacio de trabajo</span><span class="hidden sm:inline">/</span><strong id="viewLabel">Campañas</strong></div><div class="workspace-label"><i></i>Tu espacio de prospección</div></header>
+    <main id="main" tabindex="-1"></main>
+  </div>
+</div>
+
+<!-- Nueva campaña -->
+<div class="modal-bg" id="newModal">
+  <div class="modal">
+    <div class="mb-6 flex items-start justify-between gap-3"><h2 class="!mb-0">Nueva búsqueda de leads</h2><button class="btn ghost sm" type="button" aria-label="Cerrar ventana" onclick="closeModals()">✕</button></div>
+    <div class="grid2">
+      <div class="field"><label>Nombre de la campaña</label><input type="text" id="fName" placeholder="Odontólogos Medellín"></div>
+      <div class="field"><label>Cliente</label><input type="text" id="fClient" placeholder="Cliente / proyecto"></div>
+    </div>
+    <div class="field"><label>¿Qué servicio quieres vender?</label><select id="fSalesProfile"><option value="general">Prospección general</option><option value="web">Diseño web</option><option value="seo">SEO local</option><option value="social">Gestión de redes</option></select><div class="hint">La prioridad se calcula según el servicio. Puedes comparar perfiles en la lista de leads.</div></div>
+    <div class="grid2">
+      <div class="field"><label>Palabras clave (una por línea)</label>
+        <textarea id="fKw" rows="4" placeholder="odontología&#10;clínica dental&#10;ortodoncia"></textarea>
+        <div class="hint">Usa sinónimos para superar el límite de 60 resultados por consulta.</div></div>
+      <div class="field"><label>Ubicaciones (una por línea)</label>
+        <textarea id="fLoc" rows="4" placeholder="El Poblado, Medellín&#10;Laureles, Medellín&#10;Envigado"></textarea>
+        <div class="hint">Divide ciudades grandes por barrios o localidades.</div></div>
+    </div>
+    <div class="field"><label>Fuentes</label>
+      <div class="srcs">
+        <label class="src"><input type="checkbox" name="src" value="google_maps" checked><div><b>Google Maps</b><small>Sin API o Places API: nombre, teléfono, web, rating</small></div></label>
+        <label class="src"><input type="checkbox" name="src" value="website" checked><div><b>Sitio web</b><small>Correos, WhatsApp, Instagram, Facebook, TikTok</small></div></label>
+        <label class="src"><input type="checkbox" name="src" value="instagram"><div><b>Instagram</b><small>Consulta pública sin API o API de Meta; perfiles encontrados en la web</small></div></label>
+        <label class="src"><input type="checkbox" name="src" value="linkedin"><div><b>LinkedIn público</b><small>Encuentra enlaces en la web y consulta empresas cuando el acceso lo permita</small></div></label>
+        <label class="src"><input type="checkbox" name="src" value="rues" onchange="toggleRues()"><div><b>Directorio RUES</b><small>Negocios activos en Cámaras de Comercio (Colombia)</small></div></label>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Modo de Google Maps</label><select id="fMapsMode" onchange="toggleMapsMode(); updateEstimate()"><option value="web" selected>Sin API (navegador)</option><option value="api">Places API (requiere clave)</option></select><div class="hint">Sin API usa las fichas públicas. Puede detenerse por captchas o cambios en Maps.</div></div>
+      <div class="field" id="mapsWebOpts"><label>Máximo de fichas por consulta</label><input type="number" id="fMapsLimit" min="1" max="120" value="40"><div class="hint">Límite de fichas a visitar, antes de filtrar o eliminar duplicados.</div></div>
+    </div>
+    <div class="field"><label>Modo de Instagram</label><select id="fInstagramMode"><option value="web" selected>Público, sin API</option><option value="api">API de Meta (requiere credenciales)</option></select><div class="hint">Al seleccionar Instagram también se revisa la web para encontrar el perfil. La consulta pública guarda contactos y datos visibles cuando el acceso lo permite; puede quedar bloqueada por robots.txt o requerir sesión.</div></div>
+    <div id="ruesOpts" style="display:none" class="grid2">
+      <div class="field"><label>Matriculados desde</label><input type="text" id="fSince" placeholder="20260101"><div class="hint">AAAAMMDD · ideal para negocios nuevos</div></div>
+      <div class="field"><label>Códigos CIIU (opcional)</label><input type="text" id="fCiiu" placeholder="8621, 5611"><div class="hint">La ubicación se usa como nombre de la Cámara</div></div>
+      <label class="chip" style="grid-column:1/-1;width:max-content"><input type="checkbox" id="fCross" checked>Cruzar con Places API (requiere clave; solo en modo API)</label>
+    </div>
+    <details style="margin-bottom:12px"><summary>Opciones avanzadas</summary>
+      <div class="grid2" style="margin-top:10px">
+        <div class="field" id="mapsApiOpts"><label>Páginas por consulta de API (20 c/u)</label><select id="fPages"><option>1</option><option>2</option><option selected>3</option></select></div>
+        <div class="field"><label>Rating mínimo</label><select id="fRating"><option value="">Cualquiera</option><option>3.5</option><option>4</option><option>4.5</option></select></div>
+        <div class="field"><label>País (región)</label><input type="text" id="fRegion" value="CO"></div>
+        <div class="field"><label>Páginas adicionales de la web</label><input type="number" id="fWebPages" min="0" max="8" value="4"><div class="hint">Contacto, nosotros y sedes; además de la portada.</div></div>
+      </div>
+    </details>
+    <div class="estimate" id="estimate">Escribe palabras clave y ubicaciones para ver el costo estimado.</div>
+    <div class="actions"><button class="btn" onclick="closeModals()">Cancelar</button><button class="btn primary" onclick="createCampaign()">Buscar leads</button></div>
+  </div>
+</div>
+
+<!-- Ajustes -->
+<div class="modal-bg" id="setModal">
+  <div class="modal">
+    <div class="mb-6 flex items-start justify-between gap-3"><h2 class="!mb-0">Ajustes</h2><button class="btn ghost sm" type="button" aria-label="Cerrar ventana" onclick="closeModals()">✕</button></div>
+    <label class="chip" style="margin-bottom:14px"><input type="checkbox" id="sDemo">Modo demostración (datos ficticios, sin gastar API)</label>
+    <div class="field"><label>Google Maps API key (opcional)</label><input type="password" id="sGoogle" placeholder="AIza…"><div class="hint">Solo para Places API y cruce RUES. El modo Sin API no necesita clave. Desactiva demostración para obtener datos reales.</div></div>
+    <div class="field"><label>Precio estimado por 1.000 llamadas (USD)</label><input type="number" id="sPrice" step="0.5"><div class="hint">Text Search Enterprise. Verifica la tarifa vigente en tu consola de Google.</div></div>
+    <div class="grid2">
+      <div class="field"><label>Token de Meta (Instagram)</label><input type="password" id="sMeta"></div>
+      <div class="field"><label>ID de tu cuenta IG profesional</label><input type="text" id="sIg"></div>
+    </div>
+    <div class="field"><label>App token de datos.gov.co (opcional)</label><input type="password" id="sSocrata"><div class="hint">Evita límites de velocidad en consultas RUES.</div></div>
+    <div class="actions"><button class="btn" onclick="closeModals()">Cancelar</button><button class="btn primary" onclick="saveSettings()">Guardar</button></div>
+    <h2 style="margin-top:26px">Usuarios del equipo</h2>
+    <div id="userList"></div>
+    <div class="grid2" style="margin-top:12px">
+      <input type="text" id="uName" placeholder="Usuario">
+      <input type="password" id="uPass" placeholder="Contraseña (mín. 8)">
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+      <label class="chip"><input type="checkbox" id="uAdmin">Administrador</label>
+      <button class="btn" onclick="addUser()">＋ Agregar usuario</button>
+    </div>
+  </div>
+</div>
+
+<div class="login-bg" id="loginBg">
+  <div class="login-shell">
+    <div class="login-story"><div class="flex items-center gap-3 text-xl font-semibold"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M10 7v6M7 10h6"/></svg></span>LeadHunter</div><div><div class="mb-5 inline-flex rounded-full border border-white/25 px-3 py-1.5 text-xs text-indigo-100">Tu próxima oportunidad empieza aquí</div><h2 class="text-4xl leading-tight font-semibold tracking-tight text-white">De un negocio<br>a una oportunidad.</h2><p class="mt-5 text-sm leading-relaxed text-indigo-100">Reúne empresas, encuentra contactos y descubre dónde tus servicios pueden aportar más.</p></div><div class="flex gap-5 text-xs text-indigo-100"><span>01 · Descubre</span><span>02 · Prioriza</span><span>03 · Conecta</span></div></div>
+    <form class="login" onsubmit="doLogin(event)"><div class="eyebrow">Bienvenido a tu espacio</div><h2>Iniciar sesión</h2><p class="mb-7 text-sm text-slate-500">Accede a tus campañas y oportunidades.</p>
+      <div class="field"><label for="lUser">Usuario</label><input type="text" id="lUser" autocomplete="username" required placeholder="Tu usuario"></div>
+      <div class="field"><label for="lPass">Contraseña</label><input type="password" id="lPass" autocomplete="current-password" required placeholder="Tu contraseña"></div>
+      <div class="err" id="lErr" role="alert"></div><button class="btn primary w-full" type="submit">Entrar al espacio →</button><p class="mt-6 text-xs leading-relaxed text-slate-400">Si es tu primer acceso, usa las credenciales configuradas al iniciar LeadHunter.</p>
+    </form>
+  </div>
+</div>
+
+<div class="modal-bg" id="pwModal">
+  <div class="modal" style="max-width:420px">
+    <div class="mb-6 flex items-start justify-between gap-3"><h2 class="!mb-0">Cambiar contraseña</h2><button class="btn ghost sm" type="button" aria-label="Cerrar ventana" onclick="closeModals()">✕</button></div>
+    <div class="field"><label>Contraseña actual</label><input type="password" id="pCur"></div>
+    <div class="field"><label>Nueva contraseña (mín. 8)</label><input type="password" id="pNew"></div>
+    <div class="actions"><button class="btn" onclick="closeModals()">Cancelar</button><button class="btn primary" onclick="savePassword()">Guardar</button></div>
+  </div>
+</div>
+
+<div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div><div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Detalle de empresa o lead" tabindex="-1"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = async (url, opt = {}) => {
+  const r = await fetch(url, {headers: {'Content-Type': 'application/json'}, ...opt,
+    body: opt.body ? JSON.stringify(opt.body) : undefined});
+  if (r.status === 401 && url !== '/api/login') { showLogin(); throw new Error('Inicia sesión'); }
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(Array.isArray(e.detail) ? e.detail.map(x=>x.msg).join('; ') : e.detail || r.statusText); }
+  return r.json();
+};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toast = m => { const t = $('#toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 2600); };
+const lines = s => s.split('\n').map(x => x.trim()).filter(Boolean);
+
+let state = {cid: null, page: 1, settings: {}, timer: null, leads: []};
+const PROFILES = {general:'Prospección general', web:'Diseño web', seo:'SEO local', social:'Gestión de redes'};
+const FIELD_LABELS = {website:'Web',emails:'Correos',phone:'Teléfono',phones:'Teléfonos',whatsapp:'WhatsApp',instagram:'Instagram',facebook:'Facebook',tiktok:'TikTok',linkedin:'LinkedIn',name:'Nombre',address:'Dirección',category:'Categoría',rating:'Valoración',reviews:'Reseñas',ig_bio:'Biografía Instagram',ig_followers:'Seguidores Instagram'};
+const SOURCE_LABELS = {google_maps_web:'Google Maps (web)',google_maps_api:'Google Places API',website:'Web del negocio',linkedin_public:'LinkedIn público',instagram_public:'Instagram público',instagram_api:'API de Instagram',manual:'Aportado manualmente',demo:'Demostración',rues:'RUES','rues+maps':'RUES y Maps'};
+const F = {q:'', has_email:false, has_wa:false, no_web:false, has_ig:false, min_score:0, status:'', sort:'opportunity', sales_profile:'', opportunity:'', tag:'', min_priority:0};
+const safeUrl = u => { try { const p = new URL(u); return ['https:','http:'].includes(p.protocol) ? p.href : ''; } catch (_) { return ''; } };
+const dateLabel = value => value ? new Date(value).toLocaleString('es-CO') : 'Fecha no registrada';
+const REVIEW_STATES = {ok:'Revisada', blocked_robots:'Acceso no permitido por robots.txt', non_public_url:'Dirección no pública o no resoluble', network_error:'No accesible en esta revisión', http_error:'Respuesta HTTP de error', not_html:'Contenido no HTML', social_url:'La URL es una red social', invalid_url:'URL no válida', redirect_limit:'Demasiadas redirecciones', public_page:'Página pública consultada', access_restricted:'Acceso restringido', login_required:'Requiere sesión o verificación', relationship_unconfirmed:'Vínculo laboral no confirmado en el HTML',personal_profile:'Perfil personal: gestionar en contactos de empresa', demo:'Demostración', not_checked:'Sin revisar',not_found:'Perfil no encontrado (HTTP 404)',unavailable_content:'Datos no disponibles en el HTML público',api_success:'Consultado mediante API',api_error:'Error de la API de Meta'};
+
+async function loadSide() {
+  const cs = await api('/api/campaigns');
+  $('#campaignCount').textContent = cs.length;
+  $('#sideList').innerHTML = cs.length ? cs.map(c => `
+    <button class="side-item ${c.id === state.cid ? 'active' : ''}" onclick="openCampaign(${c.id})" ${c.id === state.cid ? 'aria-current="page"' : ''}>
+      <b>${esc(c.name)}</b>
+      <small>${esc(c.client || 'Sin cliente')} · ${c.total} leads · ${c.running ? '⏳ ' + Math.round(c.progress*100) + '%' : esc(c.status)}</small>
+    </button>`).join('') : '<small style="color:#8ea0bb;padding:6px">Aún no hay campañas.</small>';
+  return cs;
+}
+
+function demoBanner() {
+  return state.settings.demo_mode === '1'
+    ? `<div class="demo-flag">Modo demostración activo: los resultados son ficticios. Desactívalo en <a href="#" onclick="openSettings();return false">Ajustes</a> para obtener datos reales.</div>` : '';
+}
+
+async function openCampaign(id) {
+  setView('Campaña');
+  state.cid = id; state.page = 1;
+  await renderCampaign(); loadSide();
+}
+
+async function renderCampaign(refreshOnly = false) {
+  const c = await api(`/api/campaigns/${state.cid}`);
+  const s = c.stats;
+  const pct = Math.round(c.progress * 100);
+  const head = `
+    ${demoBanner()}
+    <div class="head">
+      <div><div class="eyebrow">Descubre · prioriza · conecta</div><h1>${esc(c.name)}</h1>
+        <div class="sub">${esc(c.client || 'Sin cliente')} · ${c.keywords.map(esc).join(', ')} · ${c.locations.map(esc).join(' / ')}<br>Servicio: ${esc(PROFILES[c.options.sales_profile || 'general'])}</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${c.running ? `<button class="btn" onclick="stopC()">■ Detener</button>` : `<button class="btn" onclick="startC()">↻ Ejecutar de nuevo</button>`}
+        <button class="btn" onclick="showCompanies()">Ver empresas</button><button class="btn" onclick="exportC('csv')">CSV</button>
+        <button class="btn primary" onclick="exportC('xlsx')">⬇ Excel</button>
+        <button class="btn danger" onclick="deleteC()">Eliminar</button>
+      </div>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="v">${s.total}</div><div class="l">Leads</div></div>
+      <div class="tile"><div class="v">${s.email}</div><div class="l">Con correo</div></div>
+      <div class="tile"><div class="v">${s.wa}</div><div class="l">Enlaces WhatsApp</div></div>
+      <div class="tile"><div class="v">${s.ig}</div><div class="l">Con Instagram</div></div>
+      <div class="tile"><div class="v">${s.no_web}</div><div class="l">Sin enlace web</div></div>
+      <div class="tile"><div class="v">${s.avg_score}</div><div class="l">Promedio de datos</div></div>
+    </div>
+    <div class="card progress">
+      <div style="display:flex;justify-content:space-between"><b>${c.running ? 'Buscando…' : 'Estado: ' + esc(c.status)}</b><span class="muted">${pct}% · ${c.api_calls} llamadas a Google</span></div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <details ${c.running || c.status === 'error' ? 'open' : ''}><summary>Registro</summary><div class="log" id="log">${esc(c.log.slice(-40).join('\n'))}</div></details>
+    </div>`;
+  if (refreshOnly && $('#headWrap')) { $('#headWrap').innerHTML = head; const l = $('#log'); if (l) l.scrollTop = 1e6; }
+  else {
+    $('#main').innerHTML = `<div id="headWrap">${head}</div>${leadsCard()}`;
+    bindFilters();
+  }
+  await loadLeads();
+  clearInterval(state.timer);
+  if (c.running) state.timer = setTimeout(() => { if (state.cid === c.id) { renderCampaign(true); loadSide(); } }, 1500);
+}
+
+function leadsCard() {
+  return `<div class="card">
+    <div class="card-title"><div><h2>Leads encontrados <span id="leadCount" class="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500">…</span></h2><p>Abre un negocio para ver contactos, oportunidades y evidencia.</p></div><button class="btn ghost sm" onclick="resetLeadFilters()">Limpiar filtros</button></div>
+    <div class="filters">
+      <input type="search" id="q" aria-label="Buscar leads" placeholder="Buscar nombre, dirección o correo…" value="${esc(F.q)}">
+      <label class="chip"><input type="checkbox" data-f="has_email" ${F.has_email?'checked':''}>Con correo</label>
+      <label class="chip"><input type="checkbox" data-f="has_wa" ${F.has_wa?'checked':''}>Enlace WhatsApp</label>
+      <label class="chip"><input type="checkbox" data-f="has_ig" ${F.has_ig?'checked':''}>Con Instagram</label>
+      <label class="chip"><input type="checkbox" data-f="no_web" ${F.no_web?'checked':''}>Sin web</label>
+      <select id="fStatus" aria-label="Estado del lead"><option value="">Todos los estados</option>
+        ${['nuevo','contactado','interesado','descartado'].map(x => `<option ${F.status===x?'selected':''}>${x}</option>`).join('')}</select>
+    </div>
+    <details class="advanced-filters" id="advancedFilters" ${F.sales_profile||F.opportunity||F.tag||F.min_priority?'open':''}><summary>Servicio, oportunidades y prioridad <span id="filterCount" class="text-brand-600"></span></summary><div class="filters">
+      <select id="viewProfile" aria-label="Servicio para priorizar"><option value="">Perfil de cada campaña</option>${Object.entries(PROFILES).map(([v,l]) => `<option value="${v}" ${F.sales_profile===v?'selected':''}>${l}</option>`).join('')}</select>
+      <select id="viewOpportunity" aria-label="Filtrar oportunidades"><option value="">Todas las oportunidades</option>${[['no_website','Web no encontrada en Maps'],['web_error','Web con error HTTP'],['no_https','Sin HTTPS observado'],['has_contact_form','Formulario no encontrado'],['has_viewport','Viewport no encontrado'],['has_meta_description','Descripción SEO no encontrada'],['has_title','Título no encontrado'],['no_social','Redes no encontradas en web'],['few_reviews','Pocas reseñas'],['low_rating','Rating inferior a 4']].map(([v,l])=>`<option value="${v}" ${F.opportunity===v?'selected':''}>${l}</option>`).join('')}</select>
+      <select id="viewTag" aria-label="Filtrar etiquetas"><option value="">Todas las etiquetas</option>${Object.entries({website:'Web',emails:'Correo',phone:'Teléfono',whatsapp:'WhatsApp',instagram:'Instagram',facebook:'Facebook',tiktok:'TikTok',linkedin:'LinkedIn'}).flatMap(([key,label])=>[['present','Encontrado'],['missing','No encontrado'],['unknown','Sin revisar'],...(key==='whatsapp'?[['inferred','Posible']]:[])].map(([value,text])=>`<option value="${key}:${value}" ${F.tag===key+':'+value?'selected':''}>${label}: ${text}</option>`)).join('')}</select>
+      <label class="flex items-center gap-2 text-xs text-slate-500">Prioridad mínima <input type="number" id="viewPriority" min="0" max="100" value="${F.min_priority}" aria-label="Prioridad mínima" title="Prioridad mínima (0 a 100)" style="width:80px"></label>
+      <select id="fSort" aria-label="Orden de los leads">${[['opportunity','Mayor prioridad comercial'],['score','Más datos de contacto'],['reviews','Más reseñas'],['rating','Mejor rating'],['name','Nombre'],['recent','Recientes']]
+        .map(([v,l]) => `<option value="${v}" ${F.sort===v?'selected':''}>${l}</option>`).join('')}</select>
+    </div>
+    </details>
+    <div class="table-wrap"><table class="min-w-[980px]">
+      <thead><tr><th>Negocio / oportunidades</th><th>Contacto</th><th>Etiquetas y procedencia</th><th>Rating</th><th>Prioridad</th><th>Estado</th></tr></thead>
+      <tbody id="tbody"></tbody></table></div>
+    <div class="pager" id="pager"></div></div>`;
+}
+
+function bindFilters() {
+  let h; $('#q').oninput = e => { clearTimeout(h); h = setTimeout(() => { F.q = e.target.value; state.page = 1; loadLeads(); }, 250); };
+  document.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { F[i.dataset.f] = i.checked; state.page = 1; loadLeads(); });
+  $('#fStatus').onchange = e => { F.status = e.target.value; state.page = 1; loadLeads(); };
+  $('#fSort').onchange = e => { F.sort = e.target.value; loadLeads(); };
+  [['#viewProfile','sales_profile'],['#viewOpportunity','opportunity'],['#viewTag','tag'],['#viewPriority','min_priority']].forEach(([selector,key]) => $(selector).onchange = e => {F[key] = key==='min_priority' ? Math.max(0,Math.min(100,+e.target.value || 0)) : e.target.value; state.page=1;loadLeads();});
+}
+
+function filterParams() {
+  const p = new URLSearchParams();
+  if (state.cid) p.set('campaign_id', state.cid);
+  Object.entries(F).forEach(([k, v]) => { if (v) p.set(k, v); });
+  return p;
+}
+
+let leadRequest = 0;
+async function loadLeads() {
+  const request = ++leadRequest;
+  const p = filterParams(); p.set('page', state.page); p.set('per_page', 50);
+  let r;
+  try { r = await api('/api/leads?' + p); } catch(e) { if(request===leadRequest && $('#tbody')) { $('#tbody').innerHTML='<tr><td colspan="6"><div class="empty">No se pudieron cargar los leads. <button class="btn sm" onclick="loadLeads()">Reintentar</button></div></td></tr>'; toast(e.message); } return; }
+  if(request!==leadRequest || !$('#tbody')) return;
+  $('#leadCount').textContent = r.total;
+  updateFilterCount();
+  state.leads = r.items;
+  $('#tbody').innerHTML = r.items.length ? r.items.map(rowHtml).join('')
+    : `<tr><td colspan="6"><div class="empty"><h2>No hay coincidencias</h2><p>Prueba otra búsqueda o elimina algunos filtros para ver más negocios.</p><button class="btn" onclick="resetLeadFilters()">Limpiar filtros</button></div></td></tr>`;
+  const pages = Math.max(1, Math.ceil(r.total / r.per_page));
+  $('#pager').innerHTML = `<span>${r.total} leads</span><span>
+    <button class="btn sm" ${state.page<=1?'disabled':''} onclick="state.page--;loadLeads()">‹</button>
+    Página ${state.page} de ${pages}
+    <button class="btn sm" ${state.page>=pages?'disabled':''} onclick="state.page++;loadLeads()">›</button></span>`;
+}
+
+function rowHtml(l) {
+  const sc = l.opportunity_score >= 70 ? 's-hi' : l.opportunity_score >= 40 ? 's-md' : 's-lo';
+  const ch = tagsHtml(l, true);
+  const opportunities = l.relevant_opportunities || [];
+  return `<tr class="row" tabindex="0" aria-label="Abrir ${esc(l.name)}" onclick="openLead(${l.id})" onkeydown="if(event.target===this && (event.key==='Enter'||event.key===' ')){event.preventDefault();openLead(${l.id})}">
+    <td><div class="name">${esc(l.name)}</div><div class="muted">${esc(l.category || '')}${l.city ? ' · ' + esc(l.city) : ''}</div>${opportunities.slice(0,2).map(o=>`<span class="opportunity" title="${esc(o.reason)}">↗ ${esc(o.title)}</span>`).join('')}${opportunities.length>2?`<span class="muted">+${opportunities.length-2} oportunidades</span>`:''}</td>
+    <td>${esc(l.phone || '')}<div class="muted">${esc(l.emails[0] || '')}</div></td>
+    <td>${ch}<div class="muted" style="margin-top:5px">${esc(l.data_quality.label)} · ${l.data_quality.evidence_coverage}% de datos con procedencia</div></td>
+    <td>${l.rating ? '★ ' + l.rating : '—'}<div class="muted">${l.reviews ?? ''}${l.reviews != null ? ' reseñas' : ''}</div></td>
+    <td><span class="score ${sc}" title="Ver desglose al abrir el lead">${l.opportunity_score}/100</span><div class="muted">${esc(l.sales_profile_label)}<br>Datos disponibles: ${l.score}/100</div></td>
+    <td><span class="status st-${l.status}">${l.status}</span></td></tr>`;
+}
+function tagsHtml(l, clickable=false) { return `<div class="lead-tags">${(l.tags||[]).map(t=>`<${clickable?'button type="button"':'span'} class="lead-tag tag-${t.state}" title="${esc(t.detail)}" ${clickable?`onclick="event.stopPropagation();setTag('${t.key}:${t.state}')"`:''}>${t.state==='present'?'✓':t.state==='unknown'?'?':'•'} ${esc(t.label)}</${clickable?'button':'span'}>`).join('')}</div>`; }
+function setTag(tag) { F.tag=tag;state.page=1;if($('#viewTag')) {$('#viewTag').value=tag;$('#advancedFilters').open=true;}loadLeads(); }
+const fmtK = n => n >= 1000 ? (n/1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : n;
+
+function openLead(id) {
+  const l = state.leads.find(x => x.id === id); if (!l) return;
+  const link = (u, t) => safeUrl(u) ? `<a href="${esc(safeUrl(u))}" target="_blank" rel="noopener">${esc(t || u)}</a>` : '—';
+  const extra = Object.entries(l.extra || {}).filter(([,v]) => v).map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+  $('#drawer').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:start;gap:10px">
+      <div><h2 style="margin:0 0 4px;font-size:19px">${esc(l.name)}</h2><div class="muted">${esc(l.category || '')} · fuente: ${esc(l.source)}</div><button class="btn sm" onclick="companyProfile='${l.sales_profile}';openCompany(${l.company_id})">Empresa #${l.company_id}: ${esc(l.company_name)} · ver responsables</button></div>
+      <button class="btn sm" onclick="closeDrawer()" aria-label="Cerrar detalle">✕</button></div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      ${l.whatsapp ? `<a class="btn sm primary" target="_blank" href="${esc(l.whatsapp)}">Abrir WhatsApp</a>` : ''}
+      ${l.emails[0] ? `<a class="btn sm" href="mailto:${esc(l.emails[0])}">Enviar correo</a>` : ''}
+      ${l.maps_url ? `<a class="btn sm" target="_blank" href="${esc(l.maps_url)}">Ver en Maps</a>` : ''}
+    </div>
+    <dl class="kv">
+      <dt>Teléfonos</dt><dd>${(l.phones && l.phones.length ? l.phones : [l.phone || '—']).map(esc).join('<br>')}</dd>
+      <dt>Correos</dt><dd>${l.emails.length ? l.emails.map(esc).join('<br>') : '—'}</dd>
+      <dt>Dirección</dt><dd>${esc(l.address || '—')}</dd>
+      <dt>Sitio web</dt><dd>${link(l.website)}</dd>
+      <dt>Instagram</dt><dd>${link(l.instagram)}${l.ig_followers != null ? ` · ${l.ig_followers.toLocaleString('es-CO')} seguidores` : ''}</dd>
+      ${l.ig_bio ? `<dt>Bio IG</dt><dd>${esc(l.ig_bio)}</dd>` : ''}
+      <dt>Facebook</dt><dd>${link(l.facebook)}</dd>
+      ${l.tiktok ? `<dt>TikTok</dt><dd>${link(l.tiktok)}</dd>` : ''}
+      ${l.linkedin ? `<dt>LinkedIn</dt><dd>${link(l.linkedin)}</dd>` : ''}
+      <dt>Rating</dt><dd>${l.rating ? `★ ${l.rating} (${l.reviews} reseñas)` : '—'}</dd>
+      <dt>Prioridad</dt><dd>${l.opportunity_score}/100 · ${esc(l.sales_profile_label)}</dd>
+      <dt>Datos disponibles</dt><dd>${l.score}/100</dd>
+      ${extra}
+    </dl>
+    ${tagsHtml(l)}
+    <div class="insight-box"><h3>¿Por qué esta prioridad?</h3>${l.score_breakdown.map(b=>`<div>+${b.points} · ${esc(b.reason)}</div>`).join('') || '<div>Sin señales suficientes.</div>'}<div class="muted" style="margin-top:6px">Heurística comercial; no predice una venta.</div></div>
+    <h3>Oportunidades detectadas</h3>${l.opportunities.length ? l.opportunities.map(o=>`<div class="evidence-item"><b>${esc(o.title)}</b><br>${esc(o.reason)}<br><span class="muted">Para ${o.profiles.map(p=>esc(PROFILES[p])).join(', ')}</span>${o.url?'<br>'+link(o.url,'Ver evidencia'):''}</div>`).join('') : '<p class="muted">No hay señales suficientes para detectar oportunidades.</p>'}
+    <div class="insight-box"><h3>Calidad y procedencia</h3><b>${esc(l.data_quality.label)}</b> · ${l.data_quality.evidence_coverage}% de cobertura<br>${esc(l.data_quality.email_status)}<p class="muted">${esc(l.data_quality.note)}</p></div>
+    <details><summary>Ver fuente y fecha de cada dato</summary>${Object.entries(l.provenance||{}).flatMap(([field,records])=>records.map(r=>`<div class="evidence-item"><b>${esc(FIELD_LABELS[field] || field)}: ${esc(r.value)}</b><br>${esc(SOURCE_LABELS[r.source] || r.source)} · ${esc(r.verification)} · confianza ${esc(r.confidence)}<br>${esc(dateLabel(r.observed_at))}<br>${link(r.url,'Página de origen')}</div>`)).join('') || '<p class="muted">Estos datos antiguos no tienen evidencia guardada. Vuelve a revisar la web para documentarlos.</p>'}</details>
+    <div class="insight-box"><h3>Revisión de la web</h3>${esc(REVIEW_STATES[l.web_audit.status] || 'Sin revisar')} · ${esc(dateLabel(l.web_audit.checked_at))}${l.web_audit.partial?'<br>Revisión parcial: algunas páginas no pudieron consultarse.':''}${(l.web_audit.pages||[]).map(u=>'<br>'+link(u)).join('')}<br>${l.website?`<button class="btn sm" onclick="reviewLead(${l.id},'website',this)">Volver a buscar contactos y oportunidades</button>`:''}</div>
+    <div class="field"><label>Web del negocio (puedes añadir o corregir)</label><input type="text" id="dWebsite" value="${esc(l.website || '')}" placeholder="https://negocio.com"><div class="hint">Guarda el cambio y pulsa Volver a buscar para revisar la web.</div></div>
+    <h3>Instagram</h3><div class="field"><label>Enlace del perfil</label><input type="text" id="dInstagram" value="${esc(l.instagram || '')}" placeholder="https://www.instagram.com/negocio/"><div class="hint">Puedes añadir o corregir el perfil. Guarda el cambio antes de consultarlo.</div></div>
+    <div class="insight-box">${esc(REVIEW_STATES[(l.instagram_data||{}).status] || 'Sin revisar')} · ${esc(dateLabel((l.instagram_data||{}).checked_at))}${l.instagram_data.mode?'<br>Modo: '+(l.instagram_data.mode==='web'?'Público, sin API':'API de Meta'):''}${l.instagram_data.note?'<p class="muted">'+esc(l.instagram_data.note)+'</p>':''}${l.instagram_data.title?'<br>'+esc(l.instagram_data.title):''}${(l.instagram_data.external_links||[]).map(u=>'<br>'+link(u,'Enlace publicado')).join('')}<br>${l.instagram?`<button class="btn sm" onclick="reviewLead(${l.id},'instagram',this)">Consultar perfil público sin API</button>`:''}</div>
+    <h3>LinkedIn</h3><div class="field"><label>Enlace de empresa o perfil</label><input type="text" id="dLinkedin" value="${esc(l.linkedin || '')}" placeholder="https://www.linkedin.com/company/..."><div class="hint">Se detecta desde la web o puedes añadirlo. La consulta pública procesa páginas de empresa; no accede con sesión.</div></div><p class="muted">${esc(REVIEW_STATES[l.linkedin_data.status] || 'Sin revisar')} · ${esc(dateLabel(l.linkedin_data.checked_at))}${l.linkedin_data.title?'<br>'+esc(l.linkedin_data.title):''}</p>${l.linkedin?`<button class="btn sm" onclick="reviewLead(${l.id},'linkedin',this)">Consultar página pública de empresa</button>`:''}
+    <details><summary>Cambiar asociación de empresa</summary><p class="muted">Consulta el ID en Empresas y responsables. Puedes corregir una agrupación o separar este registro; los contactos de persona permanecen en su empresa original.</p><div class="field"><label>ID de empresa</label><input id="leadCompanyId" type="number" min="1" value="${l.company_id}"></div><button class="btn sm" onclick="reassignCompany(${l.id})">Asociar a esta empresa</button> <button class="btn sm" onclick="reassignCompany(${l.id},true)">Separar en una nueva empresa</button></details>
+    <div class="field"><label>Estado</label><select id="dStatus">
+      ${['nuevo','contactado','interesado','descartado'].map(x => `<option ${l.status===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="field"><label>Notas</label><textarea id="dNotes" rows="4">${esc(l.notes || '')}</textarea></div>
+    <button class="btn primary" onclick="saveLead(${l.id})">Guardar</button>`;
+  openDrawer();
+}
+
+async function saveLead(id) {
+  try { await api(`/api/leads/${id}`, {method: 'PATCH', body: {status: $('#dStatus').value, notes: $('#dNotes').value, website: $('#dWebsite').value.trim(), linkedin: $('#dLinkedin').value.trim(), instagram: $('#dInstagram').value.trim()}}); }
+  catch(e) {toast(e.message);return;}
+  closeDrawer(); toast('Lead actualizado'); loadLeads();
+}
+async function reviewLead(id, kind, button) {
+  const request=drawerRequest;
+  button.disabled=true;button.textContent='Revisando…';
+  try {const l=await api(`/api/leads/${id}/review-${kind}?sales_profile=${encodeURIComponent(F.sales_profile)}`,{method:'POST'});await loadLeads();if(request!==drawerRequest || !$('#drawer.open')) return;const index=state.leads.findIndex(x=>x.id===id);if(index<0) state.leads.push(l);openLead(id);toast('Revisión terminada');}
+  catch(e) {toast(e.message);button.disabled=false;button.textContent='Volver a revisar';}
+}
+
+async function showAll() {
+  setView('Todos los leads');
+  state.cid = null; state.page = 1; clearTimeout(state.timer); loadSide();
+  $('#main').innerHTML = `${demoBanner()}<div class="head"><div><div class="eyebrow">Tu base de oportunidades</div><h1>Todos los leads</h1><div class="sub">De todas las campañas</div></div>
+    <div style="display:flex;gap:8px"><button class="btn" onclick="showCompanies()">Ver empresas</button><button class="btn" onclick="exportC('csv')">CSV</button><button class="btn primary" onclick="exportC('xlsx')">⬇ Excel</button></div></div>${leadsCard()}`;
+  bindFilters(); loadLeads();
+}
+
+function exportC(fmt) { const p = filterParams(); p.set('fmt', fmt); location.href = '/api/export?' + p; }
+async function startC() { await api(`/api/campaigns/${state.cid}/start`, {method: 'POST'}); toast('Campaña en curso'); renderCampaign(); loadSide(); }
+async function stopC() { await api(`/api/campaigns/${state.cid}/stop`, {method: 'POST'}); setTimeout(() => { renderCampaign(); loadSide(); }, 400); }
+async function deleteC() {
+  if (!confirm('¿Eliminar esta campaña y todos sus leads?')) return;
+  await api(`/api/campaigns/${state.cid}`, {method: 'DELETE'}); state.cid = null; init();
+}
+
+// ---------- nueva campaña ----------
+function toggleRues() { $('#ruesOpts').style.display = document.querySelector('[value=rues]').checked ? 'grid' : 'none'; }
+function toggleMapsMode() {
+  const web = $('#fMapsMode').value === 'web';
+  $('#mapsWebOpts').style.display = web ? '' : 'none';
+  $('#mapsApiOpts').style.display = web ? 'none' : '';
+  $('#fCross').disabled = web;
+}
+function formData() {
+  return {
+    name: $('#fName').value, client: $('#fClient').value,
+    keywords: lines($('#fKw').value), locations: lines($('#fLoc').value),
+    sources: [...document.querySelectorAll('[name=src]:checked')].map(i => i.value),
+    options: {instagram_mode: $('#fInstagramMode').value, sales_profile: $('#fSalesProfile').value, web_max_pages: +$('#fWebPages').value,
+      maps_mode: $('#fMapsMode').value, maps_max_results: +$('#fMapsLimit').value,
+      max_pages: +$('#fPages').value, min_rating: $('#fRating').value ? +$('#fRating').value : null,
+      region: $('#fRegion').value.trim().toUpperCase(), rues_since: $('#fSince').value.trim(),
+      rues_ciiu: $('#fCiiu').value.trim(), rues_cross_maps: !$('#fCross').disabled && $('#fCross').checked}
+  };
+}
+async function updateEstimate() {
+  const d = formData();
+  if (!d.keywords.length || !d.locations.length) { $('#estimate').textContent = 'Escribe palabras clave y ubicaciones para ver el costo estimado.'; return; }
+  let e;
+  try { e = await api('/api/estimate', {method: 'POST', body: d}); }
+  catch (_) { $('#estimate').textContent = 'Revisa las opciones: el máximo de fichas debe estar entre 1 y 120.'; return; }
+  $('#estimate').innerHTML = state.settings.demo_mode === '1'
+    ? `<b>${e.queries}</b> consultas · modo demostración (sin costo)`
+    : e.maps_mode === 'web'
+    ? `<b>${e.queries}</b> consultas · hasta <b>${e.max_results}</b> fichas a visitar · <b>sin clave ni cargos de Places API</b>. Los resultados pueden ser menores por filtros, duplicados o bloqueos.`
+    : `<b>${e.queries}</b> consultas → hasta <b>${e.max_calls}</b> llamadas y <b>${e.max_results}</b> resultados · costo máx. aprox. <b>US$ ${e.max_cost_usd}</b>${d.sources.includes('rues') && d.options.rues_cross_maps ? ' + 1 llamada por negocio RUES' : ''}. Google incluye un cupo gratis mensual por SKU.`;
+}
+function openNew() {
+  $('#newModal').classList.add('open'); $('#fKw').focus();
+  toggleMapsMode();
+  ['#fKw','#fLoc','#fPages','#fMapsLimit','#fRating'].forEach(s => $(s).oninput = updateEstimate);
+  document.querySelectorAll('[name=src]').forEach(i => i.addEventListener('change', updateEstimate));
+  updateEstimate();
+}
+async function createCampaign() {
+  const d = formData();
+  if (!d.keywords.length || !d.locations.length) return toast('Agrega palabras clave y ubicaciones');
+  if (!d.sources.length) return toast('Elige al menos una fuente');
+  try {
+    const r = await api('/api/campaigns', {method: 'POST', body: d});
+    closeModals(); ['#fName','#fKw','#fLoc'].forEach(s => $(s).value = '');
+    openCampaign(r.id);
+  } catch (e) { toast(e.message); }
+}
+
+// ---------- ajustes ----------
+async function openSettings() {
+  if (!state.me?.is_admin) return toast('Solo un administrador puede cambiar los ajustes');
+  const s = state.settings = await api('/api/settings');
+  loadUsers();
+  $('#sDemo').checked = s.demo_mode === '1'; $('#sGoogle').value = s.google_api_key;
+  $('#sPrice').value = s.price_per_1000; $('#sMeta').value = s.meta_token;
+  $('#sIg').value = s.ig_user_id; $('#sSocrata').value = s.socrata_token;
+  $('#setModal').classList.add('open');
+}
+async function saveSettings() {
+  state.settings = await api('/api/settings', {method: 'POST', body: {
+    demo_mode: $('#sDemo').checked ? '1' : '0', google_api_key: $('#sGoogle').value,
+    price_per_1000: $('#sPrice').value, meta_token: $('#sMeta').value,
+    ig_user_id: $('#sIg').value, socrata_token: $('#sSocrata').value}});
+  closeModals(); toast('Ajustes guardados');
+  state.cid ? renderCampaign() : init();
+}
+
+// ---------- sesión y usuarios ----------
+function showLogin() { clearTimeout(state.timer); $('#loginBg').classList.add('open'); setTimeout(() => $('#lUser').focus(), 50); }
+async function doLogin(e) {
+  e.preventDefault(); $('#lErr').textContent = '';
+  try {
+    await api('/api/login', {method: 'POST', body: {username: $('#lUser').value, password: $('#lPass').value}});
+    $('#lPass').value = ''; $('#loginBg').classList.remove('open'); init();
+  } catch (err) { $('#lErr').textContent = err.message; }
+}
+async function doLogout() { await api('/api/logout', {method: 'POST'}); state.cid = null; showLogin(); }
+function openPassword() { $('#pCur').value = $('#pNew').value = ''; $('#pwModal').classList.add('open'); }
+async function savePassword() {
+  try { await api('/api/me/password', {method: 'POST', body: {current: $('#pCur').value, new: $('#pNew').value}});
+    closeModals(); toast('Contraseña actualizada'); } catch (e) { toast(e.message); }
+}
+async function loadUsers() {
+  const us = await api('/api/users');
+  $('#userList').innerHTML = us.map(u => `<div class="user-row"><span><b>${esc(u.username)}</b> ${u.is_admin ? '<span class="muted">· admin</span>' : ''}</span>
+    ${u.id === state.me.id ? '<span class="muted">tú</span>' : `<button class="btn sm danger" onclick="delUser(${u.id})">Eliminar</button>`}</div>`).join('');
+}
+async function addUser() {
+  try { await api('/api/users', {method: 'POST', body: {username: $('#uName').value, password: $('#uPass').value, is_admin: $('#uAdmin').checked}});
+    $('#uName').value = $('#uPass').value = ''; $('#uAdmin').checked = false; toast('Usuario creado'); loadUsers(); } catch (e) { toast(e.message); }
+}
+async function delUser(id) { if (confirm('¿Eliminar este usuario?')) { await api(`/api/users/${id}`, {method: 'DELETE'}); loadUsers(); } }
+
+function closeModals() { document.querySelectorAll('.modal-bg').forEach(m => m.classList.remove('open')); syncOverlays(); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModals(); closeDrawer(); } });
+document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', e => { if (e.target === m) closeModals(); }));
+
+async function init() {
+  try { state.me = await api('/api/me'); } catch { return; }
+  $('#whoName').textContent = state.me.username + (state.me.is_admin ? ' · admin' : '');
+  state.settings = await api('/api/settings');
+  const cs = await loadSide();
+  if (state.cid) return renderCampaign();
+  if (cs.length) return openCampaign(cs[0].id);
+  $('#main').innerHTML = `${demoBanner()}<div class="card empty"><h2>Encuentra tus primeros leads</h2>
+    <p>Crea una búsqueda con palabras clave (ej. “clínica dental”) y ubicaciones (ej. “Laureles, Medellín”).<br>
+    LeadHunter consulta Google Maps y visita la web de cada negocio para encontrar correos, WhatsApp y redes.</p>
+    <button class="btn primary" onclick="openNew()">＋ Nueva búsqueda</button></div>`;
+}
+// Fichas de empresa y contactos profesionales asociados.
+const RELATION_LABELS = {pending:'Candidato: vínculo por confirmar',published:'Vínculo publicado: vigencia por confirmar',confirmed:'Vínculo confirmado manualmente',rejected:'Descartado'};
+const companyLink = (url, text) => safeUrl(url) ? `<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener">${esc(text || url)}</a>` : '';
+let companyPage = 1;
+let companyQuery = '';
+let companyProfile = 'general';
+let companyRequest = 0;
+let companySearchTimer;
+
+async function showCompanies(reset=true) {
+  setView('Empresas');
+  clearTimeout(state.timer);
+  if(reset) {companyPage=1;companyQuery='';companyProfile=F.sales_profile || (state.cid?(await api(`/api/campaigns/${state.cid}`)).options.sales_profile:'general') || 'general';}
+  closeDrawer();
+  $('#main').innerHTML = `${demoBanner()}<div class="head"><div><div class="eyebrow">Una empresa · todas sus conexiones</div><h1>Empresas</h1><div class="sub">${state.cid?'Empresas de la campaña seleccionada':'Empresas de todas las campañas'} · cada ficha reúne registros y contactos asociados.</div></div><button class="btn" onclick="showCompanies(false)">Actualizar</button></div>
+    <div class="card"><div class="card-title"><div><h2>Directorio de empresas</h2><p>Contactos y responsables asociados a cada negocio.</p></div><span class="text-xs text-slate-400">Ordenadas por prioridad</span></div><div class="filters"><input id="companyQuery" type="search" aria-label="Buscar empresas" placeholder="Buscar empresa o ciudad…" value="${esc(companyQuery)}"><select id="companyProfile" aria-label="Servicio para priorizar responsables">${Object.entries(PROFILES).map(([v,l])=>`<option value="${v}" ${v===companyProfile?'selected':''}>${l}</option>`).join('')}</select></div><div class="table-wrap"><table><thead><tr><th>Empresa</th><th>Contactos del negocio</th><th>Responsables y candidatos</th><th>Prioridad</th></tr></thead><tbody id="companyRows"></tbody></table></div><div class="pager" id="companyPager"></div></div>`;
+  $('#companyQuery').oninput=e=>{companyQuery=e.target.value;companyPage=1;clearTimeout(companySearchTimer);companySearchTimer=setTimeout(loadCompanies,250);};
+  $('#companyProfile').onchange=e=>{companyProfile=e.target.value;companyPage=1;loadCompanies();};
+  await loadCompanies();
+}
+async function loadCompanies() {
+  const request=++companyRequest;
+  const p=new URLSearchParams({page:companyPage,per_page:50,q:companyQuery,sales_profile:companyProfile});
+  if(state.cid) p.set('campaign_id',state.cid);
+  const data=await api('/api/companies?'+p);
+  if(request!==companyRequest || !$('#companyRows')) return;
+  $('#companyRows').innerHTML=data.items.length?data.items.map(c=>`<tr class="row" tabindex="0" aria-label="Abrir empresa ${esc(c.name)}" onclick="openCompany(${c.id})" onkeydown="if(event.target===this && (event.key==='Enter'||event.key===' ')){event.preventDefault();openCompany(${c.id})}"><td><b>${esc(c.name)}</b><div class="muted">Empresa #${c.id} · ${c.record_count} registros · ${c.campaign_count} campañas<br>${c.cities.map(esc).join(', ')}<br>${c.sources.map(esc).join(' · ')}${c.demo?'<br>Datos de demostración':''}</div>${tagsHtml(c)}</td><td>${c.phones.map(esc).join('<br>')}<div class="muted">${c.emails.map(esc).join('<br>')}</div></td><td>${c.contacts.length?c.contacts.slice(0,3).map(p=>`<div class="evidence-item"><b>${esc(p.name || 'Perfil sin nombre publicado')}</b><br>${esc(p.role || 'Cargo por confirmar')}<br><span class="muted">${esc(RELATION_LABELS[p.relationship])}${p.decision_priority?' · encaje '+p.decision_priority+'/100':''}${p.evidence_records.some(e=>e.verification==='demo')?' · DEMO':''}</span></div>`).join(''):'<span class="muted">Sin candidatos encontrados todavía</span>'}${c.contacts.length>3?'<small>+'+(c.contacts.length-3)+' contactos</small>':''}</td><td><span class="score">${c.opportunity_score}/100</span><div class="muted">${esc(c.sales_profile_label)}<br>Mayor prioridad de sus registros</div></td></tr>`).join(''):'<tr><td colspan="4" class="empty">No hay empresas con estos filtros.</td></tr>';
+  const pages=Math.max(1,Math.ceil(data.total/data.per_page));
+  $('#companyPager').innerHTML=`<span>${data.total} ${data.total===1?'empresa':'empresas'} · abre una fila para ver sus responsables</span><span><button class="btn sm" ${companyPage<=1?'disabled':''} onclick="companyPage--;loadCompanies()">‹</button> ${companyPage} de ${pages} <button class="btn sm" ${companyPage>=pages?'disabled':''} onclick="companyPage++;loadCompanies()">›</button></span>`;
+}
+async function allCompanies() {state.cid=null;await loadSide();await showCompanies();}
+async function openCompany(cid) {
+  const request=++drawerRequest;
+  try {
+    const c=await api(`/api/companies/${cid}?sales_profile=${companyProfile}`);
+    if(request!==drawerRequest) return;
+    $('#drawer').innerHTML=`<div style="display:flex;justify-content:space-between"><h2>${esc(c.name)}</h2><button class="btn sm" onclick="closeDrawer()" aria-label="Cerrar detalle">✕</button></div><div class="muted">Empresa #${c.id} · ${esc(c.grouping_note)}<br>Servicio: ${esc(PROFILES[companyProfile])}</div>
+      <details><summary>Editar nombre de empresa</summary><div class="field"><label>Nombre comercial de la empresa</label><input id="canonicalCompanyName" value="${esc(c.name)}" maxlength="200"></div><button class="btn sm" onclick="saveCompanyName(${cid})">Guardar nombre de empresa</button></details>
+      <h3>Registros y fuentes asociados</h3>${c.records.map(r=>`<div class="evidence-item"><b>${esc(r.name)}</b><br>${esc(r.source)} · campaña #${r.campaign_id}<br>${esc(r.address || r.city || '')}<br>${companyLink(r.website,'Web')} ${companyLink(r.linkedin,'LinkedIn')} ${companyLink(r.instagram,'Instagram')}<br><button class="btn sm" onclick="openCompanyRecord(${cid},${r.id})">Abrir registro y contactos</button></div>`).join('')}
+      <h3>Responsables y candidatos</h3><p class="muted">El cargo orienta el encaje comercial. Un vínculo publicado puede estar desactualizado; no confirma autoridad de compra. Los candidatos sin vínculo confirmado no reciben prioridad.</p>
+      <button class="btn primary sm" onclick="reviewCompanyPeople(${cid},this)">Buscar responsables de esta empresa</button><p>${companyLink(c.search_url,'Buscar perfiles de esta empresa en Google / LinkedIn')}</p>
+      <div id="peopleReview"></div>${c.contacts.map(p=>`<div class="insight-box"><b>${esc(p.name || 'Perfil sin nombre publicado')}</b><br>${esc(p.role || 'Cargo por confirmar')}<br>${esc(RELATION_LABELS[p.relationship])}${p.evidence_records.some(e=>e.verification==='demo')?' · DEMOSTRACIÓN':''}<br>${companyLink(p.linkedin,'Ver perfil de LinkedIn')}${p.emails.length?'<br>'+p.emails.map(esc).join('<br>'):''}${p.phones.length?'<br>'+p.phones.map(esc).join('<br>'):''}<p class="muted">Encaje del cargo: ${p.decision_priority}/100<br>${esc(p.decision_reason)}<br>Última consulta: ${esc(REVIEW_STATES[p.review_data.status] || 'Sin revisar')} · ${esc(dateLabel(p.review_data.checked_at))}</p><details><summary>Ver evidencia</summary>${p.evidence_records.map(e=>`<div class="evidence-item">${esc(e.value)}<br>${esc(SOURCE_LABELS[e.source] || e.source)} · ${esc(dateLabel(e.observed_at))}<br>${companyLink(e.url,'Fuente')}</div>`).join('')}</details><div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn sm" onclick="decideCompanyContact(${cid},${p.id},'confirmed')">Confirmar vínculo</button><button class="btn sm" onclick="decideCompanyContact(${cid},${p.id},'pending')">Dejar pendiente</button><button class="btn sm" onclick="decideCompanyContact(${cid},${p.id},'rejected')">Descartar</button></div></div>`).join('') || '<p class="muted">No se han encontrado personas asociadas. Revisa las páginas de equipo o añade un perfil localizado con la búsqueda de esta empresa.</p>'}
+      <details><summary>Añadir o actualizar una persona de esta empresa</summary><div class="field"><label>Nombre</label><input id="personName" maxlength="200"></div><div class="field"><label>Cargo publicado</label><input id="personRole" maxlength="300" placeholder="Gerente / directora de marketing / responsable digital"></div><div class="field"><label>Perfil de LinkedIn</label><input id="personLinkedin" placeholder="https://www.linkedin.com/in/..."></div><div class="field"><label>Correo publicado de esta persona</label><input id="personEmail"></div><div class="field"><label>Teléfono publicado de esta persona</label><input id="personPhone"></div><div class="field"><label>URL que demuestra el vínculo o cargo</label><input id="personSource"></div><div class="field"><label>Vínculo con la empresa</label><select id="personRelation"><option value="pending">Pendiente de confirmar</option><option value="confirmed">Lo he confirmado manualmente</option></select></div><button class="btn primary sm" onclick="addCompanyContact(${cid})">Guardar persona vinculada</button></details>`;
+    openDrawer();
+  } catch(e) {toast(e.message);}
+}
+async function openCompanyRecord(cid,lid) {
+  const request=drawerRequest;
+  const c=await api(`/api/companies/${cid}?sales_profile=${companyProfile}`);
+  if(request!==drawerRequest || !$('#drawer').classList.contains('open')) return;
+  const r=c.records.find(r=>r.id===lid);
+  state.leads=state.leads.filter(x=>x.id!==lid);state.leads.push(r);openLead(lid);
+}
+async function reviewCompanyPeople(cid,button) {
+  const request=drawerRequest;
+  button.disabled=true;button.textContent='Buscando responsables…';
+  try {const r=await api(`/api/companies/${cid}/review-decision-makers?sales_profile=${companyProfile}`,{method:'POST'});if(request!==drawerRequest || !$('#drawer.open')) return;await openCompany(cid);$('#peopleReview').innerHTML=`<p class="muted">${esc({demo:'Demostración',reviewed:'Revisión completada',no_candidates:'No hay perfiles enlazados para consultar',access_restricted:'Acceso limitado'}[r.review.status] || r.review.status)} · ${r.review.reviewed} perfiles revisados${r.review.results.map(x=>'<br>'+esc(REVIEW_STATES[x.status] || x.status)).join('')}</p>`;if($('#companyRows')) await loadCompanies();}
+  catch(e) {toast(e.message);button.disabled=false;button.textContent='Volver a buscar responsables';}
+}
+async function addCompanyContact(cid) {
+  const request=drawerRequest;
+  try {await api(`/api/companies/${cid}/contacts`,{method:'POST',body:{name:$('#personName').value.trim(),role:$('#personRole').value.trim(),linkedin:$('#personLinkedin').value.trim(),emails:$('#personEmail').value.trim()?[$('#personEmail').value.trim()]:[],phones:$('#personPhone').value.trim()?[$('#personPhone').value.trim()]:[],source_url:$('#personSource').value.trim(),relationship:$('#personRelation').value}});if(request!==drawerRequest || !$('#drawer.open')) return;await openCompany(cid);if($('#companyRows')) await loadCompanies();toast('Persona vinculada a la empresa');}catch(e){toast(e.message);}
+}
+async function decideCompanyContact(cid,id,relationship) {
+  const request=drawerRequest;
+  try {await api(`/api/company-contacts/${id}`,{method:'PATCH',body:{relationship}});if(request!==drawerRequest || !$('#drawer.open')) return;await openCompany(cid);if($('#companyRows')) await loadCompanies();}catch(e){toast(e.message);}
+}
+async function reassignCompany(lid,separate=false) {
+  const request=drawerRequest;
+  try {const cid=separate?null:Number($('#leadCompanyId').value);if(!separate && (!Number.isInteger(cid) || cid<1)){toast('Introduce un ID de empresa válido');return;}const l=await api(`/api/leads/${lid}/company`,{method:'POST',body:{company_id:cid}});state.leads=state.leads.filter(x=>x.id!==lid);state.leads.push(l);if(request!==drawerRequest || !$('#drawer.open')) return;openLead(lid);if($('#companyRows')) await loadCompanies();else if($('#tbody')) await loadLeads();toast('Asociación actualizada');}catch(e){toast(e.message);}
+}
+
+async function saveCompanyName(cid) {
+  const request=drawerRequest;
+  try {await api(`/api/companies/${cid}`,{method:'PATCH',body:{name:$('#canonicalCompanyName').value.trim()}});if(request!==drawerRequest || !$('#drawer.open')) return;await openCompany(cid);if($('#companyRows')) await loadCompanies();toast('Nombre de empresa actualizado');}catch(e){toast(e.message);}
+}
+
+function toggleSidebar(force) {
+  const open = force ?? !$('#sidebar').classList.contains('mobile-open');
+  $('#sidebar').classList.toggle('mobile-open',open);
+  $('#mobileBackdrop').classList.toggle('open',open);
+  $('#menuToggle').setAttribute('aria-expanded',String(open));
+  syncSidebar();
+}
+function syncSidebar() { $('#sidebar').inert=window.matchMedia('(max-width:1023px)').matches&&!$('#sidebar').classList.contains('mobile-open'); }
+window.addEventListener('resize',syncSidebar);
+let drawerRequest=0;
+function openDrawer() {
+  ++drawerRequest;
+  $('#drawer').classList.add('open');
+  syncOverlays();
+}
+function closeDrawer() {
+  ++drawerRequest;
+  $('#drawer').classList.remove('open');
+  // Release the backdrop and page in the same event as X, Escape or navigation.
+  const backdrop=$('#drawerBackdrop');
+  backdrop.classList.remove('open');
+  backdrop.style.display='none';
+  backdrop.style.pointerEvents='none';
+  syncOverlays();
+}
+function setView(label) {
+  ++leadRequest; ++companyRequest;
+  closeDrawer(); toggleSidebar(false);
+  window.scrollTo({top:0,left:0,behavior:'instant'});
+  $('#viewLabel').textContent=label;
+  $('#navCompanies').classList.toggle('active',label==='Empresas');
+  $('#navLeads').classList.toggle('active',label==='Todos los leads');
+  [$('#navCompanies'),$('#navLeads')].forEach(b=>b.classList.contains('active')?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current'));
+}
+function updateFilterCount() {
+  const n=[F.sales_profile,F.opportunity,F.tag,F.min_priority].filter(Boolean).length;
+  if($('#filterCount')) $('#filterCount').textContent=n?'· '+n+' activos':'';
+}
+function resetLeadFilters() {
+  Object.assign(F,{q:'',has_email:false,has_wa:false,no_web:false,has_ig:false,min_score:0,status:'',sort:'opportunity',sales_profile:'',opportunity:'',tag:'',min_priority:0});
+  state.page=1;
+  $('#q').value=''; document.querySelectorAll('[data-f]').forEach(i=>i.checked=false);
+  $('#fStatus').value=''; $('#fSort').value='opportunity';
+  ['viewProfile','viewOpportunity','viewTag'].forEach(id=>$('#'+id).value=''); $('#viewPriority').value=0;
+  $('#advancedFilters').open=false; loadLeads();
+}
+// Make generated fields and overlays usable with keyboard and screen readers.
+let activeOverlay=null, previousFocus=null;
+function syncOverlays() {
+  const login=$('#loginBg.open');
+  const modal=document.querySelector('.modal-bg.open .modal');
+  const drawer=$('#drawer.open');
+  const overlay=login||modal||drawer;
+  const showBackdrop=!!drawer&&!login&&!modal;
+  const backdrop=$('#drawerBackdrop');
+  backdrop.classList.toggle('open',showBackdrop);
+  backdrop.style.display=showBackdrop?'block':'none';
+  backdrop.style.pointerEvents=showBackdrop?'auto':'none';
+  backdrop.setAttribute('aria-hidden',String(!showBackdrop));
+  document.body.style.overflow=overlay?'hidden':'';
+  $('.app').inert=!!overlay;
+  $('#drawer').inert=!drawer||!!(login||modal);
+  if(overlay!==activeOverlay) {
+    if(overlay) { if(!activeOverlay) previousFocus=document.activeElement; activeOverlay=overlay; requestAnimationFrame(()=>{if(activeOverlay===overlay) (overlay.querySelector('input,button,select,textarea,a[href]')||overlay).focus();}); }
+    else {activeOverlay=null;if(previousFocus?.isConnected) previousFocus.focus();}
+  }
+  document.querySelectorAll('.modal,.field').forEach(container=>{
+    if(container.classList.contains('modal')) {container.setAttribute('role','dialog');container.setAttribute('aria-modal','true');const heading=container.querySelector('h2');if(heading) container.setAttribute('aria-label',heading.textContent);}
+    else {const label=container.querySelector('label'),input=container.querySelector('input[id],select[id],textarea[id]');if(label&&input&&!label.htmlFor)label.htmlFor=input.id;}
+  });
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape') toggleSidebar(false);
+  if(e.key!=='Tab'||!activeOverlay) return;
+  const nodes=[...activeOverlay.querySelectorAll('button,input,select,textarea,a[href],summary,[tabindex="0"]')].filter(n=>!n.disabled&&n.getClientRects().length);
+  if(!nodes.length) {e.preventDefault();activeOverlay.focus();return;}
+  if(e.shiftKey&&(document.activeElement===nodes[0]||!activeOverlay.contains(document.activeElement))) {e.preventDefault();nodes.at(-1).focus();}
+  else if(!e.shiftKey&&(document.activeElement===nodes.at(-1)||!activeOverlay.contains(document.activeElement))) {e.preventDefault();nodes[0].focus();}
+});
+const uiObserver=new MutationObserver(syncOverlays);
+['newModal','setModal','pwModal','loginBg','drawer'].forEach(id=>uiObserver.observe($('#'+id),{attributes:true,attributeFilter:['class']}));
+uiObserver.observe($('#drawer'),{childList:true});
+syncOverlays();
+syncSidebar();
+init().catch(e=>toast(e.message));
+
+</script>
+</body>
+</html>

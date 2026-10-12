@@ -1,0 +1,29 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    shm_size: '1gb'
+    env_file: .env
+    volumes:
+      - ./data:/app/data        # base de datos (leads, usuarios, API keys)
+    expose:
+      - "8000"                  # solo accesible dentro de Docker, no desde internet
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:
