@@ -22,6 +22,7 @@ app = FastAPI(title="LeadHunter", docs_url=None, redoc_url=None, openapi_url=Non
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 db.init()
 auth.init()
+db.assign_orphans()
 companies.backfill()
 
 PUBLIC = {"/", "/api/login", "/api/logout", "/api/me"}
@@ -95,7 +96,9 @@ class UserIn(BaseModel):
 
 @app.get("/api/users", dependencies=[Depends(auth.require_admin)])
 def list_users():
-    return db.query("SELECT id, username, is_admin, created_at FROM users ORDER BY id")
+    return db.query("""SELECT u.id, u.username, u.is_admin, u.created_at,
+        (SELECT COUNT(*) FROM campaigns c WHERE c.owner_id = u.id) AS campaign_count
+        FROM users u ORDER BY u.id""")
 
 
 @app.post("/api/users", dependencies=[Depends(auth.require_admin)])
@@ -103,13 +106,45 @@ def add_user(body: UserIn):
     return {"id": auth.create_user(body.username, body.password, body.is_admin)}
 
 
+class ResetPasswordIn(BaseModel):
+    password: str
+
+
+@app.post("/api/users/{uid}/password", dependencies=[Depends(auth.require_admin)])
+def reset_user_password(uid: int, body: ResetPasswordIn):
+    if not db.one("SELECT id FROM users WHERE id = ?", (uid,)):
+        raise HTTPException(404, "Usuario no encontrado")
+    if len(body.password) < 8:
+        raise HTTPException(400, "La contraseña debe tener mín. 8 caracteres.")
+    db.execute("UPDATE users SET pw_hash = ? WHERE id = ?", (auth.hash_pw(body.password), uid))
+    db.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
+    return {"ok": True}
+
+
 @app.delete("/api/users/{uid}")
 def delete_user(uid: int, admin=Depends(auth.require_admin)):
     if uid == admin["id"]:
         raise HTTPException(400, "No puedes eliminar tu propio usuario.")
+    # Sus campañas y empresas pasan al administrador que lo elimina; no se pierden datos.
+    db.execute("UPDATE campaigns SET owner_id = ? WHERE owner_id = ?", (admin["id"], uid))
+    db.execute("UPDATE companies SET owner_id = ? WHERE owner_id = ?", (admin["id"], uid))
     db.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
     db.execute("DELETE FROM users WHERE id = ?", (uid,))
     return {"ok": True}
+
+
+# ---------------- acceso por usuario ----------------
+def _user(request: Request):
+    return request.state.user
+
+
+def _owns(user, owner_id) -> bool:
+    return bool(user["is_admin"]) or owner_id == user["id"]
+
+
+def _owner_scope(user, column="owner_id"):
+    """Condición SQL para limitar consultas a lo que el usuario puede ver."""
+    return ("1=1", []) if user["is_admin"] else (f"{column} = ?", [user["id"]])
 
 SECRET_KEYS = ["google_api_key", "meta_token", "ig_user_id", "socrata_token"]
 PLAIN_KEYS = ["demo_mode", "price_per_1000"]
@@ -195,42 +230,48 @@ def estimate(c: CampaignIn):
 
 
 @app.get("/api/campaigns")
-def list_campaigns():
-    rows = db.query("""SELECT c.id, c.name, c.client, c.status, c.progress, c.api_calls,
-        c.created_at, c.keywords, c.locations, c.sources,
+def list_campaigns(request: Request):
+    user = _user(request)
+    scope, params = _owner_scope(user, "c.owner_id")
+    rows = db.query(f"""SELECT c.id, c.name, c.client, c.status, c.progress, c.api_calls,
+        c.created_at, c.keywords, c.locations, c.sources, c.owner_id,
+        (SELECT username FROM users u WHERE u.id = c.owner_id) AS owner_name,
         (SELECT COUNT(*) FROM leads l WHERE l.campaign_id = c.id) AS total,
         (SELECT COUNT(*) FROM leads l WHERE l.campaign_id = c.id AND l.emails != '[]') AS with_email
-        FROM campaigns c ORDER BY c.id DESC""")
+        FROM campaigns c WHERE {scope} ORDER BY c.id DESC""", tuple(params))
     for r in rows:
         r["running"] = r["id"] in jobs.RUNNING
     return rows
 
 
 @app.post("/api/campaigns")
-async def create_campaign(c: CampaignIn):
+async def create_campaign(c: CampaignIn, request: Request):
     kws, locs = _clean(c.keywords), _clean(c.locations)
     if not kws or not locs:
         raise HTTPException(400, "Agrega al menos una palabra clave y una ubicación.")
     cid = db.insert("campaigns", {"name": c.name.strip() or f"{kws[0]} · {locs[0]}",
                                   "client": c.client.strip(), "keywords": kws,
                                   "locations": locs, "sources": c.sources,
-                                  "options": c.options})
+                                  "options": c.options, "owner_id": _user(request)["id"]})
     if c.start:
         jobs.start(cid)
     return {"id": cid}
 
 
-def _campaign(cid):
+def _campaign(cid, user):
     c = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
-    if not c:
+    # 404 también cuando es de otro usuario, para no revelar que existe.
+    if not c or not _owns(user, c["owner_id"]):
         raise HTTPException(404, "Campaña no encontrada")
     return c
 
 
 @app.get("/api/campaigns/{cid}")
-def get_campaign(cid: int):
-    c = _campaign(cid)
+def get_campaign(cid: int, request: Request):
+    c = _campaign(cid, _user(request))
     c["running"] = cid in jobs.RUNNING
+    owner = db.one("SELECT username FROM users WHERE id = ?", (c["owner_id"],))
+    c["owner_name"] = owner["username"] if owner else ""
     s = db.one("""SELECT COUNT(*) total,
         SUM(emails != '[]') email, SUM(whatsapp IS NOT NULL AND whatsapp != '') wa,
         SUM(phone IS NOT NULL AND phone != '') phone,
@@ -243,18 +284,20 @@ def get_campaign(cid: int):
 
 
 @app.post("/api/campaigns/{cid}/start")
-async def start_campaign(cid: int):
-    _campaign(cid)
+async def start_campaign(cid: int, request: Request):
+    _campaign(cid, _user(request))
     return {"started": jobs.start(cid)}
 
 
 @app.post("/api/campaigns/{cid}/stop")
-def stop_campaign(cid: int):
+def stop_campaign(cid: int, request: Request):
+    _campaign(cid, _user(request))
     return {"stopped": jobs.stop(cid)}
 
 
 @app.delete("/api/campaigns/{cid}")
-def delete_campaign(cid: int):
+def delete_campaign(cid: int, request: Request):
+    _campaign(cid, _user(request))
     jobs.stop(cid)
     db.execute("DELETE FROM leads WHERE campaign_id = ?", (cid,))
     db.execute("DELETE FROM campaigns WHERE id = ?", (cid,))
@@ -294,8 +337,10 @@ def sales_profiles():
     return [{"id": key, "label": label} for key, label in intelligence.PROFILES.items()]
 
 
-def _lead_filter(campaign_id, q, has_email, has_wa, no_web, has_ig, min_score, status, source):
+def _lead_filter(user, campaign_id, q, has_email, has_wa, no_web, has_ig, min_score, status, source):
     where, p = ["1=1"], []
+    if not user["is_admin"]:
+        where.append("campaign_id IN (SELECT id FROM campaigns WHERE owner_id = ?)"); p.append(user["id"])
     if campaign_id:
         where.append("campaign_id = ?"); p.append(campaign_id)
     if q:
@@ -319,12 +364,12 @@ def _lead_filter(campaign_id, q, has_email, has_wa, no_web, has_ig, min_score, s
 
 
 @app.get("/api/leads")
-def list_leads(campaign_id: int | None = None, q: str = "", has_email: bool = False,
+def list_leads(request: Request, campaign_id: int | None = None, q: str = "", has_email: bool = False,
                has_wa: bool = False, no_web: bool = False, has_ig: bool = False,
                min_score: int = 0, status: str = "", source: str = "",
                sort: str = "score", page: int = Query(1, ge=1), per_page: int = Query(50, ge=1, le=500),
                sales_profile: str = "", opportunity: str = "", tag: str = "", min_priority: int = Query(0, ge=0, le=100)):
-    where, p = _lead_filter(campaign_id, q, has_email, has_wa, no_web, has_ig,
+    where, p = _lead_filter(_user(request), campaign_id, q, has_email, has_wa, no_web, has_ig,
                             min_score, status, source)
     rows = analyzed_rows(where, p, sales_profile, opportunity, tag, min_priority, sort)
     return {"total": len(rows), "page": page, "per_page": per_page,
@@ -373,11 +418,16 @@ class LeadPatch(BaseModel):
         return value
 
 
-@app.patch("/api/leads/{lid}")
-def patch_lead(lid: int, body: LeadPatch):
+def _lead(lid, user):
     lead = db.one("SELECT * FROM leads WHERE id = ?", (lid,))
-    if not lead:
+    if not lead or not _owns(user, companies.lead_owner(lead)):
         raise HTTPException(404, "Lead no encontrado")
+    return lead
+
+
+@app.patch("/api/leads/{lid}")
+def patch_lead(lid: int, body: LeadPatch, request: Request):
+    lead = _lead(lid, _user(request))
     upd = body.model_dump(exclude_none=True)
     if body.website is not None and body.website != (lead.get("website") or ""):
         added = {"website": [intelligence.evidence(body.website, "manual", body.website, verification="aportado", confidence="baja")]} if body.website else {}
@@ -399,13 +449,14 @@ def patch_lead(lid: int, body: LeadPatch):
 
 
 @app.get("/api/companies")
-def list_companies(campaign_id: int | None = None, q: str = "", sales_profile: str = "general",
+def list_companies(request: Request, campaign_id: int | None = None, q: str = "", sales_profile: str = "general",
                    page: int = Query(1, ge=1), per_page: int = Query(50, ge=1, le=200)):
     if sales_profile not in intelligence.PROFILES:
         raise HTTPException(422, "Perfil comercial inválido")
     companies.backfill()
     rows = []
-    for company in db.query("SELECT * FROM companies ORDER BY id DESC"):
+    scope, params = _owner_scope(_user(request))
+    for company in db.query(f"SELECT * FROM companies WHERE {scope} ORDER BY id DESC", tuple(params)):
         info = companies.detail(company["id"], sales_profile)
         records = info["records"]
         if not records or campaign_id and not any(r["campaign_id"] == campaign_id for r in records):
@@ -435,16 +486,16 @@ def list_companies(campaign_id: int | None = None, q: str = "", sales_profile: s
     return {"items": rows[(page-1)*per_page:page*per_page], "total": len(rows), "page": page, "per_page": per_page}
 
 
-def company_exists(cid):
+def company_exists(cid, user):
     company = db.one("SELECT * FROM companies WHERE id=?", (cid,))
-    if not company:
+    if not company or not _owns(user, company["owner_id"]):
         raise HTTPException(404, "Empresa no encontrada")
     return company
 
 
 @app.get("/api/companies/{cid}")
-def get_company(cid: int, sales_profile: str = "general"):
-    company_exists(cid)
+def get_company(cid: int, request: Request, sales_profile: str = "general"):
+    company_exists(cid, _user(request))
     if sales_profile not in intelligence.PROFILES:
         raise HTTPException(422, "Perfil comercial inválido")
     info = companies.detail(cid, sales_profile)
@@ -457,8 +508,8 @@ class CompanyName(BaseModel):
 
 
 @app.patch("/api/companies/{cid}")
-def rename_company(cid: int, body: CompanyName):
-    company_exists(cid)
+def rename_company(cid: int, body: CompanyName, request: Request):
+    company_exists(cid, _user(request))
     if not body.name.strip():
         raise HTTPException(400, "Introduce el nombre de la empresa")
     db.update("companies", cid, {"name": body.name.strip()})
@@ -470,13 +521,19 @@ class AssignCompany(BaseModel):
 
 
 @app.post("/api/leads/{lid}/company")
-def assign_company(lid: int, body: AssignCompany):
-    lead = existing_lead(lid)
+def assign_company(lid: int, body: AssignCompany, request: Request):
+    user = _user(request)
+    lead = existing_lead(lid, user)
+    owner = companies.lead_owner(lead)
     if body.company_id:
-        company_exists(body.company_id)
+        company = company_exists(body.company_id, user)
+        # Un registro solo puede ir a una empresa del mismo dueño que su campaña.
+        if company["owner_id"] != owner:
+            raise HTTPException(404, "Empresa no encontrada")
         cid = body.company_id
     else:
-        cid = db.insert("companies", {"name": lead.get("name") or "Empresa sin nombre", "grouping_note": "Empresa separada manualmente."})
+        cid = db.insert("companies", {"name": lead.get("name") or "Empresa sin nombre", "owner_id": owner,
+                                      "grouping_note": "Empresa separada manualmente."})
     db.update("leads", lid, {"company_id": cid, "company_locked": 1})
     return decorate(db.one("SELECT * FROM leads WHERE id=?", (lid,)))
 
@@ -528,8 +585,8 @@ class ContactIn(BaseModel):
 
 
 @app.post("/api/companies/{cid}/contacts")
-def add_company_contact(cid: int, body: ContactIn):
-    company_exists(cid)
+def add_company_contact(cid: int, body: ContactIn, request: Request):
+    company_exists(cid, _user(request))
     if not body.name.strip() and not body.linkedin:
         raise HTTPException(400, "Añade el nombre o el perfil de LinkedIn")
     data = body.model_dump()
@@ -552,9 +609,10 @@ class ContactDecision(BaseModel):
 
 
 @app.patch("/api/company-contacts/{contact_id}")
-def decide_contact(contact_id: int, body: ContactDecision):
-    contact = db.one("SELECT * FROM company_contacts WHERE id=?", (contact_id,))
-    if not contact:
+def decide_contact(contact_id: int, body: ContactDecision, request: Request):
+    contact = db.one("""SELECT cc.*, co.owner_id FROM company_contacts cc
+                        JOIN companies co ON co.id = cc.company_id WHERE cc.id=?""", (contact_id,))
+    if not contact or not _owns(_user(request), contact["owner_id"]):
         raise HTTPException(404, "Contacto no encontrado")
     record = intelligence.evidence(f"Vínculo {body.relationship} por revisión manual", "manual", contact["linkedin"], verification="aportado", confidence="media")
     records = intelligence.merge_provenance({"r": contact["evidence_records"]}, {"r": [record]})["r"]
@@ -563,8 +621,8 @@ def decide_contact(contact_id: int, body: ContactDecision):
 
 
 @app.post("/api/companies/{cid}/review-decision-makers")
-async def review_decision_makers(cid: int, sales_profile: str = "general"):
-    company_exists(cid)
+async def review_decision_makers(cid: int, request: Request, sales_profile: str = "general"):
+    company_exists(cid, _user(request))
     if sales_profile not in intelligence.PROFILES:
         raise HTTPException(422, "Perfil comercial inválido")
     info = companies.context(cid)
@@ -580,21 +638,19 @@ async def review_decision_makers(cid: int, sales_profile: str = "general"):
             if len(seen) >= 5:
                 break
         result = await linkedin.review_company_people(client, cid, demo=demo)
-    return {"company": get_company(cid, sales_profile), "review": result}
+    return {"company": get_company(cid, request, sales_profile), "review": result}
 
 
-def existing_lead(lid):
-    lead = db.one("SELECT * FROM leads WHERE id = ?", (lid,))
-    if not lead:
-        raise HTTPException(404, "Lead no encontrado")
+def existing_lead(lid, user):
+    lead = _lead(lid, user)
     if lead["campaign_id"] in jobs.RUNNING:
         raise HTTPException(409, "Espera a que termine la campaña para volver a revisar este lead")
     return lead
 
 
 @app.post("/api/leads/{lid}/review-website")
-async def review_website(lid: int, sales_profile: str = ""):
-    lead = existing_lead(lid)
+async def review_website(lid: int, request: Request, sales_profile: str = ""):
+    lead = existing_lead(lid, _user(request))
     if not lead.get("website"):
         raise HTTPException(400, "Este lead no tiene web para revisar")
     demo = db.get_setting("demo_mode", "1") == "1" or intelligence.analyze(lead)["data_quality"]["demo"]
@@ -603,8 +659,8 @@ async def review_website(lid: int, sales_profile: str = ""):
 
 
 @app.post("/api/leads/{lid}/review-linkedin")
-async def review_linkedin(lid: int, sales_profile: str = ""):
-    lead = existing_lead(lid)
+async def review_linkedin(lid: int, request: Request, sales_profile: str = ""):
+    lead = existing_lead(lid, _user(request))
     if not lead.get("linkedin"):
         raise HTTPException(400, "Añade primero un enlace de LinkedIn")
     demo = db.get_setting("demo_mode", "1") == "1" or intelligence.analyze(lead)["data_quality"]["demo"]
@@ -614,8 +670,8 @@ async def review_linkedin(lid: int, sales_profile: str = ""):
 
 
 @app.post("/api/leads/{lid}/review-instagram")
-async def review_instagram(lid: int, sales_profile: str = "", mode: str = "web"):
-    lead = existing_lead(lid)
+async def review_instagram(lid: int, request: Request, sales_profile: str = "", mode: str = "web"):
+    lead = existing_lead(lid, _user(request))
     if mode not in ("web", "api"):
         raise HTTPException(422, "Modo de Instagram inválido")
     if not lead.get("instagram"):
@@ -656,16 +712,19 @@ def _flat(v):
 
 
 @app.get("/api/export")
-def export(campaign_id: int | None = None, fmt: str = "xlsx", q: str = "",
+def export(request: Request, campaign_id: int | None = None, fmt: str = "xlsx", q: str = "",
            has_email: bool = False, has_wa: bool = False, no_web: bool = False,
            has_ig: bool = False, min_score: int = 0, status: str = "", source: str = "",
            sales_profile: str = "", opportunity: str = "", tag: str = "", min_priority: int = Query(0, ge=0, le=100), sort: str = "score"):
-    where, p = _lead_filter(campaign_id, q, has_email, has_wa, no_web, has_ig,
+    user = _user(request)
+    if campaign_id:
+        _campaign(campaign_id, user)
+    where, p = _lead_filter(user, campaign_id, q, has_email, has_wa, no_web, has_ig,
                             min_score, status, source)
     rows = analyzed_rows(where, p, sales_profile, opportunity, tag, min_priority, sort)
     name = "leads"
     if campaign_id:
-        c = _campaign(campaign_id)
+        c = _campaign(campaign_id, user)
         name = "leads_" + "".join(ch if ch.isalnum() else "_" for ch in c["name"])[:40]
     header = [h for _, h in EXPORT_COLS]
     data = [[_flat(r.get(k)) for k, _ in EXPORT_COLS] for r in rows]

@@ -149,13 +149,18 @@ const safeUrl = u => { try { const p = new URL(u); return ['https:','http:'].inc
 const dateLabel = value => value ? new Date(value).toLocaleString('es-CO') : 'Fecha no registrada';
 const REVIEW_STATES = {ok:'Revisada', blocked_robots:'Acceso no permitido por robots.txt', non_public_url:'Dirección no pública o no resoluble', network_error:'No accesible en esta revisión', http_error:'Respuesta HTTP de error', not_html:'Contenido no HTML', social_url:'La URL es una red social', invalid_url:'URL no válida', redirect_limit:'Demasiadas redirecciones', public_page:'Página pública consultada', access_restricted:'Acceso restringido', login_required:'Requiere sesión o verificación', relationship_unconfirmed:'Vínculo laboral no confirmado en el HTML',personal_profile:'Perfil personal: gestionar en contactos de empresa', demo:'Demostración', not_checked:'Sin revisar',not_found:'Perfil no encontrado (HTTP 404)',unavailable_content:'Datos no disponibles en el HTML público',api_success:'Consultado mediante API',api_error:'Error de la API de Meta'};
 
+// El administrador ve campañas de todos: se indica de quién es cada una.
+function ownerLabel(c) {
+  return state.me?.is_admin && c.owner_id !== state.me.id && c.owner_name ? ` · de ${esc(c.owner_name)}` : '';
+}
+
 async function loadSide() {
   const cs = await api('/api/campaigns');
   $('#campaignCount').textContent = cs.length;
   $('#sideList').innerHTML = cs.length ? cs.map(c => `
     <button class="side-item ${c.id === state.cid ? 'active' : ''}" onclick="openCampaign(${c.id})" ${c.id === state.cid ? 'aria-current="page"' : ''}>
       <b>${esc(c.name)}</b>
-      <small>${esc(c.client || 'Sin cliente')} · ${c.total} leads · ${c.running ? '⏳ ' + Math.round(c.progress*100) + '%' : esc(c.status)}</small>
+      <small>${esc(c.client || 'Sin cliente')} · ${c.total} leads · ${c.running ? '⏳ ' + Math.round(c.progress*100) + '%' : esc(c.status)}${ownerLabel(c)}</small>
     </button>`).join('') : '<small style="color:#8ea0bb;padding:6px">Aún no hay campañas.</small>';
   return cs;
 }
@@ -179,7 +184,7 @@ async function renderCampaign(refreshOnly = false) {
     ${demoBanner()}
     <div class="head">
       <div><div class="eyebrow">Descubre · prioriza · conecta</div><h1>${esc(c.name)}</h1>
-        <div class="sub">${esc(c.client || 'Sin cliente')} · ${c.keywords.map(esc).join(', ')} · ${c.locations.map(esc).join(' / ')}<br>Servicio: ${esc(PROFILES[c.options.sales_profile || 'general'])}</div></div>
+        <div class="sub">${esc(c.client || 'Sin cliente')} · ${c.keywords.map(esc).join(', ')} · ${c.locations.map(esc).join(' / ')}<br>Servicio: ${esc(PROFILES[c.options.sales_profile || 'general'])}${ownerLabel(c)}</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${c.running ? `<button class="btn" onclick="stopC()">■ Detener</button>` : `<button class="btn" onclick="startC()">↻ Ejecutar de nuevo</button>`}
         <button class="btn" onclick="showCompanies()">Ver empresas</button><button class="btn" onclick="exportC('csv')">CSV</button>
@@ -447,14 +452,24 @@ async function savePassword() {
 }
 async function loadUsers() {
   const us = await api('/api/users');
-  $('#userList').innerHTML = us.map(u => `<div class="user-row"><span><b>${esc(u.username)}</b> ${u.is_admin ? '<span class="muted">· admin</span>' : ''}</span>
-    ${u.id === state.me.id ? '<span class="muted">tú</span>' : `<button class="btn sm danger" onclick="delUser(${u.id})">Eliminar</button>`}</div>`).join('');
+  state.users = Object.fromEntries(us.map(u => [u.id, u.username]));
+  $('#userList').innerHTML = us.map(u => `<div class="user-row"><span><b>${esc(u.username)}</b> ${u.is_admin ? '<span class="muted">· admin</span>' : ''}
+      <span class="muted">· ${u.campaign_count} ${u.campaign_count === 1 ? 'campaña' : 'campañas'}</span></span>
+    <span style="display:flex;gap:6px">${u.id === state.me.id ? '<span class="muted">tú</span>' : `<button class="btn sm" onclick="resetUserPassword(${u.id})">Contraseña</button><button class="btn sm danger" onclick="delUser(${u.id})">Eliminar</button>`}</span></div>`).join('');
 }
 async function addUser() {
   try { await api('/api/users', {method: 'POST', body: {username: $('#uName').value, password: $('#uPass').value, is_admin: $('#uAdmin').checked}});
     $('#uName').value = $('#uPass').value = ''; $('#uAdmin').checked = false; toast('Usuario creado'); loadUsers(); } catch (e) { toast(e.message); }
 }
-async function delUser(id) { if (confirm('¿Eliminar este usuario?')) { await api(`/api/users/${id}`, {method: 'DELETE'}); loadUsers(); } }
+async function delUser(id) {
+  if (!confirm('¿Eliminar este usuario? Sus campañas y leads pasarán a tu cuenta.')) return;
+  try { await api(`/api/users/${id}`, {method: 'DELETE'}); toast('Usuario eliminado'); loadUsers(); loadSide(); } catch (e) { toast(e.message); }
+}
+async function resetUserPassword(id) {
+  const pw = prompt(`Nueva contraseña para ${state.users?.[id] || 'este usuario'} (mín. 8 caracteres). Se cerrarán sus sesiones abiertas.`);
+  if (!pw) return;
+  try { await api(`/api/users/${id}/password`, {method: 'POST', body: {password: pw}}); toast('Contraseña restablecida'); } catch (e) { toast(e.message); }
+}
 
 function closeModals() { document.querySelectorAll('.modal-bg').forEach(m => m.classList.remove('open')); syncOverlays(); }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModals(); closeDrawer(); } });

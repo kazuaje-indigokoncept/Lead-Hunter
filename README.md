@@ -111,6 +111,17 @@ Si en hPanel tienes activado el firewall del VPS, permite los puertos 80 y 443.
 
 **Con dominio propio:** crea un registro DNS tipo A (ej. `leads.tuagencia.com` → IP del VPS), cambia `SITE_ADDRESS` en `.env` y ejecuta `docker compose up -d`.
 
+## Usuarios y privacidad de datos
+
+Cada usuario ve solo sus propias campañas, leads, empresas y contactos; no puede abrirlos, modificarlos ni exportarlos aunque conozca su número. El administrador ve todo, y en la barra lateral aparece de quién es cada campaña. Si el mismo negocio aparece en campañas de dos usuarios, cada uno tiene su propia ficha de empresa.
+
+- **Crear usuarios:** Ajustes → Usuarios del equipo. Solo el administrador puede crearlos.
+- **Olvido de contraseña de un usuario:** el administrador pulsa **Contraseña** junto a su nombre y le asigna una nueva; sus sesiones abiertas se cierran.
+- **Eliminar un usuario:** sus campañas y leads pasan al administrador que lo elimina; no se borran datos.
+- **Si el administrador olvida su contraseña:** define la variable `RESET_ADMIN_PASSWORD` en el servidor, reinicia, entra y borra la variable.
+- Las claves de API (Ajustes) son compartidas y solo las cambia el administrador.
+- Los datos creados antes de esta versión pasan automáticamente al primer administrador.
+
 ## Configurar las APIs (Ajustes)
 
 ### Google Maps sin API

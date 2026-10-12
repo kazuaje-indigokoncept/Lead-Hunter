@@ -111,6 +111,32 @@ def init():
         if "company_locked" not in columns:
             c.execute("ALTER TABLE leads ADD COLUMN company_locked INTEGER NOT NULL DEFAULT 0")
         c.execute("CREATE INDEX IF NOT EXISTS leads_company ON leads(company_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS leads_campaign ON leads(campaign_id)")
+        # Dueño de cada campaña y empresa: cada usuario ve solo lo suyo; el admin ve todo.
+        for table in ("campaigns", "companies"):
+            if "owner_id" not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN owner_id INTEGER")
+            c.execute(f"CREATE INDEX IF NOT EXISTS {table}_owner ON {table}(owner_id)")
+
+
+def assign_orphans():
+    """Asigna al primer administrador las campañas y empresas sin dueño.
+
+    Cubre los datos creados antes de separar por usuario. Las empresas toman el dueño
+    de las campañas de sus registros cuando es único.
+    """
+    with _lock, connect() as c:
+        admin = c.execute("SELECT MIN(id) FROM users WHERE is_admin = 1").fetchone()[0]
+        if admin is None:
+            return
+        c.execute("UPDATE campaigns SET owner_id = ? WHERE owner_id IS NULL "
+                  "OR owner_id NOT IN (SELECT id FROM users)", (admin,))
+        c.execute("""UPDATE companies SET owner_id = (
+                         SELECT MIN(ca.owner_id) FROM leads l JOIN campaigns ca ON ca.id = l.campaign_id
+                         WHERE l.company_id = companies.id
+                         HAVING COUNT(DISTINCT ca.owner_id) = 1)
+                     WHERE owner_id IS NULL OR owner_id NOT IN (SELECT id FROM users)""")
+        c.execute("UPDATE companies SET owner_id = ? WHERE owner_id IS NULL", (admin,))
 
 
 def _row(r):

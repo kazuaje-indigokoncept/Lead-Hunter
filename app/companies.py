@@ -48,11 +48,22 @@ def same_company(a, b):
                 and all(normalized(a.get(k)) == normalized(b.get(k)) for k in ("name", "address", "city")))
 
 
+def lead_owner(lead):
+    row = db.one("SELECT owner_id FROM campaigns WHERE id = ?", (lead.get("campaign_id"),))
+    return row["owner_id"] if row else None
+
+
 def attach(lead):
     if lead.get("company_id"):
         return lead["company_id"]
-    candidates = db.query("SELECT * FROM leads WHERE company_id IS NOT NULL AND id != ?", (lead["id"],))
+    owner = lead_owner(lead)
+    # Solo se agrupa con registros del mismo usuario: las empresas no se comparten entre cuentas.
+    candidates = db.query("""SELECT l.* FROM leads l JOIN campaigns ca ON ca.id = l.campaign_id
+                             WHERE l.company_id IS NOT NULL AND l.id != ? AND ca.owner_id IS ?""",
+                          (lead["id"], owner))
     matches = {r["company_id"] for r in candidates if same_company(lead, r)}
+    owned = {r["id"] for r in db.query("SELECT id FROM companies WHERE owner_id IS ?", (owner,))}
+    matches &= owned
     current = lead.get("company_id")
     # Mantener la asociación ante señales contradictorias; no fusionar empresas transitivamente.
     if current:
@@ -60,7 +71,7 @@ def attach(lead):
     if len(matches) == 1:
         cid = matches.pop()
     else:
-        cid = db.insert("companies", {"name": lead.get("name") or "Empresa sin nombre",
+        cid = db.insert("companies", {"name": lead.get("name") or "Empresa sin nombre", "owner_id": owner,
             "grouping_note": "Coincidencia ambigua: revisar manualmente." if matches else "Registro original; coincidencias exactas y asociación manual."})
     db.update("leads", lead["id"], {"company_id": cid})
     return cid
