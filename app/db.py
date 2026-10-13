@@ -83,7 +83,8 @@ CREATE TABLE IF NOT EXISTS company_contacts (
 
 JSON_FIELDS = {"keywords", "locations", "sources", "options", "log", "emails", "extra"}
 JSON_FIELDS |= {"provenance", "web_audit", "phones", "linkedin_data", "instagram_data", "evidence_records", "review_data"}
-DICT_FIELDS = {"options", "extra", "provenance", "web_audit", "linkedin_data", "instagram_data", "review_data"}
+JSON_FIELDS |= {"locked", "filters", "runs"}
+DICT_FIELDS = {"options", "extra", "provenance", "web_audit", "linkedin_data", "instagram_data", "review_data", "filters"}
 
 
 @contextmanager
@@ -120,9 +121,13 @@ def init():
         # Ejecución por tandas: búsqueda por la que va, próxima tanda y errores seguidos.
         camp_cols = {r[1] for r in c.execute("PRAGMA table_info(campaigns)")}
         for name, ddl in (("next_run_at", "REAL"), ("batch_cursor", "INTEGER NOT NULL DEFAULT 0"),
-                          ("batch_errors", "INTEGER NOT NULL DEFAULT 0")):
+                          ("batch_errors", "INTEGER NOT NULL DEFAULT 0"), ("daily_date", "TEXT"),
+                          ("daily_used", "INTEGER NOT NULL DEFAULT 0"), ("runs", "TEXT NOT NULL DEFAULT '[]'")):
             if name not in camp_cols:
                 c.execute(f"ALTER TABLE campaigns ADD COLUMN {name} {ddl}")
+    # Tablas de la base general (módulo aparte para no mezclar responsabilidades).
+    from . import master
+    master.init()
 
 
 def assign_orphans():

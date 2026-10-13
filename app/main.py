@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from . import auth, db, jobs, intelligence, companies
+from . import auth, db, jobs, intelligence, companies, master, dashboard
 from .enrich import website, linkedin, instagram_public
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
@@ -35,10 +35,13 @@ async def lifespan(_app):
 
 app = FastAPI(title="LeadHunter", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+app.include_router(master.router)
+app.include_router(dashboard.router)
 db.init()
 auth.init()
 db.assign_orphans()
 companies.backfill()
+master.backfill()
 
 PUBLIC = {"/", "/api/login", "/api/logout", "/api/me"}
 
@@ -203,7 +206,11 @@ def _owner_scope(user, column="owner_id"):
     return ("1=1", []) if user["is_admin"] else (f"{column} = ?", [user["id"]])
 
 SECRET_KEYS = ["google_api_key", "meta_token", "ig_user_id", "socrata_token"]
-PLAIN_KEYS = ["demo_mode", "price_per_1000"]
+PLAIN_KEYS = ["demo_mode", "price_per_1000", "max_profiles_day", "timezone"]
+TIMEZONES = {"America/Bogota": "Bogotá · Lima · Quito (UTC−5)", "America/Guayaquil": "Guayaquil (UTC−5)",
+             "America/Mexico_City": "Ciudad de México (UTC−6)", "America/Caracas": "Caracas (UTC−4)",
+             "America/Santiago": "Santiago de Chile", "America/Argentina/Buenos_Aires": "Buenos Aires (UTC−3)",
+             "America/New_York": "Nueva York / Miami", "Europe/Madrid": "Madrid", "UTC": "UTC"}
 
 
 @app.get("/")
@@ -221,11 +228,24 @@ def get_settings():
     out = {k: _mask(db.get_setting(k)) for k in SECRET_KEYS}
     out["demo_mode"] = db.get_setting("demo_mode", "1")
     out["price_per_1000"] = db.get_setting("price_per_1000", "35")
+    out["max_profiles_day"] = str(jobs.global_cap())
+    out["timezone"] = db.get_setting("timezone", jobs.DEFAULT_TZ)
+    out["timezones"] = TIMEZONES
+    out["profiles_used_today"] = jobs.server_used_today()
     return out
 
 
 @app.post("/api/settings", dependencies=[Depends(auth.require_admin)])
 def save_settings(data: dict):
+    if "timezone" in data and data["timezone"] not in TIMEZONES:
+        raise HTTPException(422, "Zona horaria no disponible")
+    if "max_profiles_day" in data:
+        try:
+            cap = int(data["max_profiles_day"])
+        except (TypeError, ValueError):
+            raise HTTPException(422, "El tope diario debe ser un número")
+        if not jobs.PROFILE_STEP <= cap <= jobs.MAX_GLOBAL_CAP:
+            raise HTTPException(422, f"El tope diario debe estar entre {jobs.PROFILE_STEP} y {jobs.MAX_GLOBAL_CAP}")
     for k, v in data.items():
         if k in SECRET_KEYS + PLAIN_KEYS and v is not None and "•" not in str(v):
             db.set_setting(k, str(v).strip())
@@ -273,15 +293,20 @@ class CampaignIn(BaseModel):
 def validate_schedule(sch):
     if not isinstance(sch, dict):
         raise ValueError("Programación inválida")
-    interval, per_batch = sch.get("interval_minutes", 60), sch.get("combos_per_batch", 1)
-    for value in (interval, per_batch):
+    start = sch.get("window_start", jobs.DEFAULT_WINDOW[0])
+    end = sch.get("window_end", jobs.DEFAULT_WINDOW[1])
+    daily = sch.get("daily_profiles", jobs.DEFAULT_DAILY)
+    for value in (start, end, daily):
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError("La programación usa números enteros")
-    if not jobs.MIN_INTERVAL <= interval <= jobs.MAX_INTERVAL:
-        raise ValueError(f"El intervalo debe estar entre {jobs.MIN_INTERVAL} minutos y 7 días")
-    if not 1 <= per_batch <= jobs.MAX_COMBOS_PER_BATCH:
-        raise ValueError(f"Las búsquedas por tanda deben estar entre 1 y {jobs.MAX_COMBOS_PER_BATCH}")
-    return {"enabled": bool(sch.get("enabled")), "interval_minutes": interval, "combos_per_batch": per_batch}
+    if not (0 <= start < end <= 24 * 60) or start % jobs.WINDOW_STEP or end % jobs.WINDOW_STEP:
+        raise ValueError("La franja horaria debe estar dentro del día, en tramos de 30 minutos")
+    if end - start < jobs.MIN_WINDOW:
+        raise ValueError("La franja horaria debe durar al menos 1 hora")
+    cap = jobs.global_cap()
+    if not 1 <= daily <= cap:
+        raise ValueError(f"Los perfiles por día deben estar entre 1 y {cap} (tope del servidor)")
+    return {"enabled": bool(sch.get("enabled")), "window_start": start, "window_end": end, "daily_profiles": daily}
 
 
 def _clean(lst):
@@ -305,9 +330,12 @@ def estimate(c: CampaignIn):
 def _schedule_info(c):
     sch = jobs.schedule_of(c)
     total = len(c["keywords"]) * len(c["locations"])
-    return {"schedule": sch, "total_combos": total, "batch_cursor": c.get("batch_cursor") or 0,
-            "next_run_at": c.get("next_run_at"),
-            "batches_total": -(-total // sch["combos_per_batch"]) if sch["enabled"] else 1}
+    cursor = c.get("batch_cursor") or 0
+    per = jobs.per_search(c)
+    days = -(-max(total - cursor, 0) * per // sch["daily_profiles"]) if sch["enabled"] else 0
+    return {"schedule": sch, "total_combos": total, "batch_cursor": cursor, "next_run_at": c.get("next_run_at"),
+            "used_today": jobs.used_today(c), "per_search": per, "days_left": days,
+            "runs": c.get("runs") or [], "in_window": jobs.in_window(c) if sch["enabled"] else False}
 
 
 @app.get("/api/campaigns")
@@ -318,7 +346,7 @@ def list_campaigns(request: Request, owner_id: int | None = None):
         scope, params = "c.owner_id = ?", [owner_id]
     rows = db.query(f"""SELECT c.id, c.name, c.client, c.status, c.progress, c.api_calls,
         c.created_at, c.keywords, c.locations, c.sources, c.owner_id, c.options,
-        c.next_run_at, c.batch_cursor,
+        c.next_run_at, c.batch_cursor, c.daily_date, c.daily_used,
         (SELECT username FROM users u WHERE u.id = c.owner_id) AS owner_name,
         (SELECT COUNT(*) FROM leads l WHERE l.campaign_id = c.id) AS total,
         (SELECT COUNT(*) FROM leads l WHERE l.campaign_id = c.id AND l.emails != '[]') AS with_email
@@ -340,7 +368,8 @@ async def create_campaign(c: CampaignIn, request: Request):
                                   "locations": locs, "sources": c.sources,
                                   "options": c.options, "owner_id": _user(request)["id"]})
     if c.start:
-        jobs.start(cid)
+        # Programada: la primera tanda cae al azar dentro de la franja; si no, empieza ya.
+        jobs.schedule(cid) if jobs.schedule_of({"options": c.options})["enabled"] else jobs.start(cid)
     return {"id": cid}
 
 
@@ -372,8 +401,18 @@ def get_campaign(cid: int, request: Request):
 
 @app.post("/api/campaigns/{cid}/start")
 async def start_campaign(cid: int, request: Request):
-    _campaign(cid, _user(request))
+    c = _campaign(cid, _user(request))
+    if jobs.schedule_of(c)["enabled"] and cid not in jobs.RUNNING and jobs.quota_left(c) < 1:
+        raise HTTPException(409, "Ya se alcanzó el cupo de perfiles de hoy. La siguiente tanda será en la franja de mañana.")
     return {"started": jobs.start(cid)}
+
+
+@app.post("/api/campaigns/{cid}/resume")
+async def resume_campaign(cid: int, request: Request):
+    c = _campaign(cid, _user(request))
+    if not jobs.schedule_of(c)["enabled"]:
+        raise HTTPException(400, "Esta campaña no tiene programación por franja horaria.")
+    return {"scheduled": jobs.schedule(cid)}
 
 
 @app.post("/api/campaigns/{cid}/stop")
@@ -393,8 +432,9 @@ def delete_campaign(cid: int, request: Request):
 
 class ScheduleIn(BaseModel):
     enabled: bool
-    interval_minutes: int = 60
-    combos_per_batch: int = 1
+    window_start: int = jobs.DEFAULT_WINDOW[0]
+    window_end: int = jobs.DEFAULT_WINDOW[1]
+    daily_profiles: int = jobs.DEFAULT_DAILY
 
 
 @app.put("/api/campaigns/{cid}/schedule")
@@ -408,10 +448,9 @@ def set_schedule(cid: int, body: ScheduleIn, request: Request):
     if cid not in jobs.RUNNING:
         if not sch["enabled"] and c["status"] in ("programada", "pausada"):
             db.update("campaigns", cid, {"status": "detenida", "next_run_at": None})
-        elif sch["enabled"] and c["status"] == "programada" and c.get("next_run_at"):
-            # Un intervalo más corto adelanta la próxima tanda; uno más largo la retrasa.
-            last = c["next_run_at"] - jobs.schedule_of(c)["interval_minutes"] * 60
-            db.update("campaigns", cid, {"next_run_at": max(last + sch["interval_minutes"] * 60, 0)})
+        elif sch["enabled"] and c["status"] == "programada":
+            # La próxima tanda se vuelve a sortear dentro de la nueva franja.
+            db.update("campaigns", cid, {"next_run_at": jobs.plan_next(db.one("SELECT * FROM campaigns WHERE id = ?", (cid,)))})
     return get_campaign(cid, request)
 
 
@@ -556,6 +595,7 @@ def patch_lead(lid: int, body: LeadPatch, request: Request):
         upd.update(instagram_data={}, ig_bio=None, ig_followers=None)
     upd["score"] = jobs.score({**lead, **upd})
     db.update("leads", lid, upd)
+    master.safe_sync(db.one("SELECT * FROM leads WHERE id = ?", (lid,)))
     return decorate(db.one("SELECT * FROM leads WHERE id = ?", (lid,)))
 
 

@@ -111,17 +111,47 @@ Si en hPanel tienes activado el firewall del VPS, permite los puertos 80 y 443.
 
 **Con dominio propio:** crea un registro DNS tipo A (ej. `leads.tuagencia.com` → IP del VPS), cambia `SITE_ADDRESS` en `.env` y ejecuta `docker compose up -d`.
 
-## Campañas por tandas programadas
+## Base de datos general (solo administradores)
 
-Para reducir el riesgo de bloqueos por scraping, una campaña puede ejecutarse **por tandas** en lugar de hacer todas las búsquedas seguidas. Es la opción predeterminada al crear una campaña (sección **Ejecución**).
+La sección **Base de datos** reúne en un solo lugar todos los negocios encontrados por las campañas de todo el equipo, sin duplicados. Es el activo comercial del negocio: se alimenta sola y se puede segmentar, exportar y vender.
 
-- Una **búsqueda** es una palabra clave en una ubicación: 3 palabras × 2 ubicaciones = 6 búsquedas.
-- Cada **tanda** hace las búsquedas indicadas (por defecto 1) y revisa la web, LinkedIn e Instagram solo de los negocios encontrados en esa tanda.
-- Las tandas se separan por el intervalo configurado (entre 5 minutos y 7 días), con una variación aleatoria de ±15 % para no seguir un patrón fijo.
-- Solo se ejecuta **una tanda programada a la vez** en todo el servidor, aunque haya varias campañas programadas.
-- Si una tanda falla (bloqueo, captcha, error de red), se repite tras el doble del intervalo. Tras 3 fallos seguidos la campaña queda en **Error** y se puede reanudar a mano.
-- En la campaña: **Ejecutar tanda ahora**, **Pausar**, **Reanudar** y **⏱ Programación** para cambiar el ritmo o desactivarlo. Lo ya encontrado se conserva.
-- Si el servidor se reinicia (por ejemplo, al desplegar en Railway), la tanda interrumpida se repite automáticamente al arrancar.
+**Cómo se llena**
+- Cada lead real de cualquier campaña (del administrador o de los usuarios) se une automáticamente a su registro en la base al encontrarse, enriquecerse o editarse. Los datos de **modo demostración no entran**.
+- Un mismo negocio se reconoce por coincidencias exactas: la misma ficha de Google Maps, la misma matrícula RUES, el mismo dominio web con el mismo nombre, la misma página de LinkedIn, el mismo nombre y dirección, o el mismo teléfono con el mismo nombre. Una cadena con el mismo dominio pero otro nombre queda en registros separados.
+- El registro combina todas sus fuentes: todos los correos y teléfonos, y el dato más reciente de web, redes, valoración y estado. Muestra de qué campañas y usuarios viene, cuándo se vio por primera vez y cuándo se observó el último dato.
+- Borrar una campaña no borra sus negocios de la base.
+- **Corregir datos** (nombre, categoría, ciudad, dirección) los protege de futuras actualizaciones automáticas. **Fusionar** une dos registros duplicados. **Resincronizar** vuelve a recorrer todas las campañas.
+
+**Comercialización**
+- **Filtros de segmento:** texto, ciudad, categoría, con correo/teléfono/WhatsApp/web/Instagram, sin web, antigüedad del dato, completitud mínima, nunca entregados o no entregados a un cliente.
+- **Exportar / entregar:** Excel o CSV, con orden y cantidad máxima. *Registrar entrega* guarda qué registros recibió cada cliente, con precio y notas, y por defecto no repite registros que ese cliente ya tenga. Desde **Entregas** se vuelve a descargar o se anula.
+- **Datos personales separados:** por defecto solo se exportan datos del negocio y los correos genéricos (info@, ventas@, contacto@…). Los correos con nombre de persona y las personas de contacto solo se incluyen si se marca *Incluir datos personales*.
+- **Lista de exclusión:** para quien pide no figurar. Excluir un registro borra sus datos de contacto de la base, bloquea su dominio y teléfonos para campañas futuras y nunca se exporta. También se pueden añadir exclusiones por dominio, teléfono, correo o nombre.
+
+> Comercializar datos personales suele requerir la autorización de sus titulares (por ejemplo, Ley 1581 de 2012 en Colombia y LOPDP en Ecuador). Valida con un abogado qué datos puedes vender y con qué condiciones.
+
+## Pantalla de inicio
+
+Al entrar, la app abre **Inicio**: un resumen con leads totales, nuevos hoy, últimos 7 días (comparado con la semana anterior), porcentaje con correo, campañas activas y perfiles consultados hoy. Incluye la gráfica de leads por día (30 días), las próximas tandas programadas con su cupo del día, el embudo por estado y las categorías principales. Cada usuario ve sus datos; el administrador ve todo el equipo, el crecimiento de la base de datos general y la actividad por usuario. Las gráficas tienen tabla de datos y se pueden recorrer con el teclado.
+
+## Campañas programadas por franja horaria
+
+Para reducir el riesgo de bloqueos por scraping, una campaña puede ejecutarse dentro de una **franja horaria diaria** con un **máximo de perfiles por día**. Es la opción predeterminada al crear una campaña (sección **Ejecución**).
+
+- **Franja horaria:** una barra de 24 horas con dos controles para elegir el inicio y el fin (tramos de 30 minutos, mínimo 1 hora). Las tandas se activan a **horas aleatorias** dentro de la franja, distintas cada día, y nunca fuera de ella.
+- **Perfiles máximos por día:** una barra con semáforo. Verde hasta el 60 % del tope del servidor, amarillo hasta el 90 % y rojo al llegar al máximo. Al alcanzar el cupo, la campaña espera a la franja del día siguiente.
+- Una **búsqueda** es una palabra clave en una ubicación (3 palabras × 2 ubicaciones = 6 búsquedas). Cada tanda hace una búsqueda y revisa la web, LinkedIn e Instagram solo de los negocios encontrados en ella. Si el cupo corta una búsqueda, se repite completa en la siguiente franja (los repetidos se unifican).
+- **Tope del servidor** (Ajustes): máximo de perfiles al día entre todas las campañas (300 por defecto). **Zona horaria** (Ajustes): la hora en la que se interpretan las franjas (Bogotá por defecto).
+- Solo se ejecuta una tanda programada a la vez en todo el servidor. Tras un error se espera al menos una hora; tras 3 errores seguidos la campaña queda en **Error**.
+- En la campaña, la tarjeta de estado muestra la próxima tanda, los perfiles de hoy con el semáforo, un punto por búsqueda (hecha, siguiente, cortada por el cupo, pendiente) y una línea de 24 horas con la franja, las tandas de hoy y la hora actual.
+- Acción principal según el estado (**Activar**, **Pausar** o **Reanudar programación**), **⏱ Programación** para cambiar franja y cupo, y el menú **⋯** con *Ejecutar una tanda ahora*, exportar a Excel o CSV y eliminar.
+- Si el servidor se reinicia, la tanda interrumpida se vuelve a programar dentro de la franja.
+
+## Leads: tabla y detalle
+
+- Toda la fila abre el detalle del negocio; los filtros están solo en la barra superior.
+- El **estado** (nuevo, contactado, interesado, descartado) se cambia directamente en la tabla o en la cabecera del detalle.
+- El detalle se divide en pestañas: **Contacto** (datos, etiquetas y corrección de enlaces), **Oportunidades** (prioridad, oportunidades y empresa), **Evidencia** (calidad, revisiones y fuente de cada dato) y **Notas**.
 
 ## Usuarios y privacidad de datos
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LeadHunter</title>
-<link rel="stylesheet" href="/static/app.css?v=7">
+<link rel="stylesheet" href="/static/app.css?v=8">
 </head>
 <body>
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-60 focus:rounded-lg focus:bg-white focus:p-3">Ir al contenido</a>
@@ -15,6 +15,8 @@
     <button class="btn primary w-full" onclick="openNew();toggleSidebar(false)">＋ Nueva búsqueda</button>
     <div class="side-caption">Espacio de trabajo</div>
     <nav class="space-y-1">
+      <button id="navHome" class="nav-link" onclick="showHome()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7.5" height="9" rx="2"/><rect x="13.5" y="3" width="7.5" height="5.5" rx="2"/><rect x="13.5" y="11.5" width="7.5" height="9.5" rx="2"/><rect x="3" y="15" width="7.5" height="6" rx="2"/></svg>Inicio</button>
+      <button id="navMaster" class="nav-link" onclick="showMaster()" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v6.5c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V5.5M4.5 12v6.5c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V12"/></svg>Base de datos</button>
       <button id="navCompanies" class="nav-link" onclick="allCompanies()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 21V4h10v17M14 10h6v11M2 21h20M7 8h4M7 12h4M7 16h4M17 14h1M17 17h1"/></svg>Empresas y responsables</button>
       <button id="navUsers" class="nav-link" onclick="showUsers()" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.6c2 .7 3.2 2.5 3.5 5.4"/></svg>Usuarios</button>
       <button id="navLeads" class="nav-link" onclick="showAll()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 9h9M8 13h9M8 17h5"/></svg>Todos los leads</button>
@@ -57,7 +59,7 @@
       </div>
     </div>
     <div class="grid2">
-      <div class="field"><label>Modo de Google Maps</label><select id="fMapsMode" onchange="toggleMapsMode(); updateEstimate()"><option value="web" selected>Sin API (navegador)</option><option value="api">Places API (requiere clave)</option></select><div class="hint">Sin API usa las fichas públicas. Puede detenerse por captchas o cambios en Maps.</div></div>
+      <div class="field"><label>Modo de Google Maps</label><select id="fMapsMode"><option value="web" selected>Sin API (navegador)</option><option value="api">Places API (requiere clave)</option></select><div class="hint">Sin API usa las fichas públicas. Puede detenerse por captchas o cambios en Maps.</div></div>
       <div class="field" id="mapsWebOpts"><label>Máximo de fichas por consulta</label><input type="number" id="fMapsLimit" min="1" max="120" value="40"><div class="hint">Límite de fichas a visitar, antes de filtrar o eliminar duplicados.</div></div>
     </div>
     <div class="field"><label>Modo de Instagram</label><select id="fInstagramMode"><option value="web" selected>Público, sin API</option><option value="api">API de Meta (requiere credenciales)</option></select><div class="hint">Al seleccionar Instagram también se revisa la web para encontrar el perfil. La consulta pública guarda contactos y datos visibles cuando el acceso lo permite; puede quedar bloqueada por robots.txt o requerir sesión.</div></div>
@@ -66,11 +68,8 @@
       <div class="field"><label>Códigos CIIU (opcional)</label><input type="text" id="fCiiu" placeholder="8621, 5611"><div class="hint">La ubicación se usa como nombre de la Cámara</div></div>
       <label class="chip" style="grid-column:1/-1;width:max-content"><input type="checkbox" id="fCross" checked>Cruzar con Places API (requiere clave; solo en modo API)</label>
     </div>
-    <div class="field"><label>Ejecución</label><select id="fRunMode" onchange="toggleSchedule(); updateEstimate()"><option value="batches" selected>Por tandas programadas (recomendado)</option><option value="now">Todo de una vez</option></select><div class="hint">Por tandas reparte las búsquedas en el tiempo para reducir el riesgo de bloqueos por scraping.</div></div>
-    <div class="grid2" id="scheduleOpts">
-      <div class="field"><label>Búsquedas por tanda</label><input type="number" id="fPerBatch" min="1" max="50" value="1"><div class="hint">Cada búsqueda es una palabra clave en una ubicación. Cada tanda revisa también la web de lo encontrado.</div></div>
-      <div class="field"><label>Una tanda cada</label><div style="display:flex;gap:8px"><input type="number" id="fEvery" min="1" value="1" style="min-width:0"><select id="fEveryUnit" style="max-width:9rem"><option value="1">minutos</option><option value="60" selected>horas</option><option value="1440">días</option></select></div><div class="hint">Entre 5 minutos y 7 días. Varía ±15 % para no seguir un patrón fijo.</div></div>
-    </div>
+    <div class="field"><label>Ejecución</label><select id="fRunMode" onchange="toggleSchedule(); updateEstimate()"><option value="batches" selected>Programada en una franja horaria (recomendado)</option><option value="now">Todo de una vez, ahora</option></select><div class="hint">Programada reparte las búsquedas en horas aleatorias de cada día y respeta un máximo de perfiles diario, para reducir el riesgo de bloqueos.</div></div>
+    <div id="scheduleOpts" class="field"></div>
     <details style="margin-bottom:12px"><summary>Opciones avanzadas</summary>
       <div class="grid2" style="margin-top:10px">
         <div class="field" id="mapsApiOpts"><label>Páginas por consulta de API (20 c/u)</label><select id="fPages"><option>1</option><option>2</option><option selected>3</option></select></div>
@@ -91,6 +90,10 @@
     <label class="chip" style="margin-bottom:14px"><input type="checkbox" id="sDemo">Modo demostración (datos ficticios, sin gastar API)</label>
     <div class="field"><label>Google Maps API key (opcional)</label><input type="password" id="sGoogle" placeholder="AIza…"><div class="hint">Solo para Places API y cruce RUES. El modo Sin API no necesita clave. Desactiva demostración para obtener datos reales.</div></div>
     <div class="field"><label>Precio estimado por 1.000 llamadas (USD)</label><input type="number" id="sPrice" step="0.5"><div class="hint">Text Search Enterprise. Verifica la tarifa vigente en tu consola de Google.</div></div>
+    <div class="grid2">
+      <div class="field"><label>Zona horaria</label><select id="sTz"></select><div class="hint">Las franjas horarias de las campañas usan esta hora.</div></div>
+      <div class="field"><label>Tope de perfiles por día (servidor)</label><input type="number" id="sCap" min="10" max="5000" step="10"><div class="hint">Máximo entre todas las campañas. Es el final de la barra de perfiles. <span id="sCapUsed"></span></div></div>
+    </div>
     <div class="grid2">
       <div class="field"><label>Token de Meta (Instagram)</label><input type="password" id="sMeta"></div>
       <div class="field"><label>ID de tu cuenta IG profesional</label><input type="text" id="sIg"></div>
@@ -121,6 +124,28 @@
   </div>
 </div>
 
+<div class="modal-bg" id="exportModal">
+  <div class="modal" style="max-width:560px">
+    <div class="mb-6 flex items-start justify-between gap-3"><h2 class="!mb-0">Exportar o registrar entrega</h2><button class="btn ghost sm" type="button" aria-label="Cerrar ventana" onclick="closeModals()">✕</button></div>
+    <div class="estimate" id="exSummary"></div>
+    <div class="grid2">
+      <div class="field"><label>Formato</label><select id="exFmt"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV</option></select></div>
+      <div class="field"><label>Orden</label><select id="exSort"><option value="quality">Más completos primero</option><option value="recent">Más recientes primero</option></select></div>
+    </div>
+    <div class="field"><label>Cantidad máxima de registros</label><input type="number" id="exLimit" min="0" value="0"><div class="hint">0 = todos los que cumplen los filtros. Los excluidos nunca se exportan.</div></div>
+    <div class="field"><label class="chip"><input type="checkbox" id="exPersonal">Incluir datos personales</label>
+    <div class="hint">Añade correos con nombre de persona y personas de contacto (nombre, cargo, LinkedIn). Para venderlos normalmente necesitas la autorización de los titulares (Ley 1581 en Colombia, LOPDP en Ecuador). Sin marcar, solo se exportan datos del negocio.</div></div>
+    <h3>Registrar como entrega a un cliente</h3>
+    <div class="grid2">
+      <div class="field"><label>Cliente</label><input type="text" id="exClient" list="exClients" placeholder="Nombre del comprador"><datalist id="exClients"></datalist></div>
+      <div class="field"><label>Precio (opcional)</label><input type="text" id="exPrice" placeholder="US$ 150"></div>
+    </div>
+    <div class="field"><label>Notas (opcional)</label><input type="text" id="exNotes" placeholder="Pedido, condiciones, factura…"></div>
+    <label class="chip"><input type="checkbox" id="exSkip" checked>No repetir registros ya entregados a este cliente</label>
+    <div class="actions"><button class="btn" onclick="masterDownload()">Solo descargar</button><button class="btn primary" onclick="masterDeliver()">Registrar entrega y descargar</button></div>
+  </div>
+</div>
+
 <div class="modal-bg" id="userModal">
   <div class="modal" style="max-width:460px">
     <div class="mb-6 flex items-start justify-between gap-3"><h2 class="!mb-0">Nuevo usuario</h2><button class="btn ghost sm" type="button" aria-label="Cerrar ventana" onclick="closeModals()">✕</button></div>
@@ -132,14 +157,11 @@
 </div>
 
 <div class="modal-bg" id="schModal">
-  <div class="modal" style="max-width:520px">
+  <div class="modal" style="max-width:640px">
     <div class="mb-6 flex items-start justify-between gap-3"><h2 class="!mb-0">Programación de la campaña</h2><button class="btn ghost sm" type="button" aria-label="Cerrar ventana" onclick="closeModals()">✕</button></div>
-    <label class="chip" style="margin-bottom:14px"><input type="checkbox" id="schEnabled" onchange="schPreview()">Ejecutar por tandas programadas</label>
-    <div class="grid2">
-      <div class="field"><label>Búsquedas por tanda</label><input type="number" id="schPerBatch" min="1" max="50" oninput="schPreview()"></div>
-      <div class="field"><label>Una tanda cada</label><div style="display:flex;gap:8px"><input type="number" id="schEvery" min="1" style="min-width:0" oninput="schPreview()"><select id="schEveryUnit" style="max-width:9rem" onchange="schPreview()"><option value="1">minutos</option><option value="60">horas</option><option value="1440">días</option></select></div></div>
-    </div>
-    <div class="estimate" id="schPreview"></div>
+    <label class="chip" style="margin-bottom:14px"><input type="checkbox" id="schEnabled" onchange="schToggle()">Ejecutar en una franja horaria con cupo diario</label>
+    <div id="schCtl"></div>
+    <div class="estimate" id="schPreview" hidden>Al ejecutar, la campaña hará todas las búsquedas seguidas, sin franja ni cupo diario.</div>
     <div class="actions"><button class="btn" onclick="closeModals()">Cancelar</button><button class="btn primary" onclick="saveSchedule()">Guardar programación</button></div>
   </div>
 </div>
@@ -164,23 +186,30 @@ let state = {cid: null, page: 1, settings: {}, timer: null, leads: []};
 const PROFILES = {general:'Prospección general', web:'Diseño web', seo:'SEO local', social:'Gestión de redes'};
 const STATUS_LABELS = {pendiente:'Pendiente', 'en curso':'En curso', programada:'Programada', pausada:'Pausada', terminada:'Terminada', detenida:'Detenida', error:'Error'};
 const statusLabel = s => STATUS_LABELS[s] || s;
-const everyLabel = m => m % 1440 === 0 ? `${m/1440} ${m === 1440 ? 'día' : 'días'}` : m % 60 === 0 ? `${m/60} ${m === 60 ? 'hora' : 'horas'}` : `${m} min`;
-// Duración legible con dos unidades como máximo: "1 h 30 min", "2 días 4 h".
-function durationLabel(m) {
-  const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mi = Math.round(m % 60);
-  const parts = [d && `${d} ${d === 1 ? 'día' : 'días'}`, h && `${h} h`, mi && `${mi} min`].filter(Boolean);
-  return parts.slice(0, 2).join(' ') || '0 min';
+// Hora y fecha en la zona horaria de la app (la misma que usan las franjas del servidor).
+const appTz = () => state.settings?.timezone || 'America/Bogota';
+const pad2 = n => String(n).padStart(2, '0');
+const hhmm = m => m >= 1440 ? '24:00' : `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+function tzParts(ts) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone: appTz(), year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}).formatToParts(new Date(ts * 1000)).map(x => [x.type, x.value]));
+  return {date: `${parts.year}-${parts.month}-${parts.day}`, min: +parts.hour * 60 + +parts.minute, hm: `${parts.hour}:${parts.minute}`};
 }
-const splitMinutes = m => m % 1440 === 0 ? [m/1440, 1440] : m % 60 === 0 ? [m/60, 60] : [m, 1];
-const batchesDone = c => Math.ceil(c.batch_cursor / c.schedule.combos_per_batch);
-const timeLabel = ts => ts ? new Date(ts * 1000).toLocaleString('es-CO', {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}) : '';
+function whenLabel(ts) {
+  if (!ts) return '';
+  const t = tzParts(ts), now = Date.now() / 1000;
+  if (t.date === tzParts(now).date) return `hoy ${t.hm}`;
+  if (t.date === tzParts(now + 86400).date) return `mañana ${t.hm}`;
+  return new Date(ts * 1000).toLocaleDateString('es-CO', {timeZone: appTz(), weekday: 'short', day: 'numeric', month: 'short'}) + ' ' + t.hm;
+}
+const comboName = (c, i) => `${c.keywords[Math.floor(i / c.locations.length)] || ''} en ${c.locations[i % c.locations.length] || ''}`;
 // Texto corto del estado de una campaña programada.
 function scheduleSummary(c) {
   const sch = c.schedule;
   if (!sch?.enabled) return '';
-  const base = `Tanda ${Math.min(batchesDone(c), c.batches_total)} de ${c.batches_total} · ${sch.combos_per_batch} ${sch.combos_per_batch === 1 ? 'búsqueda' : 'búsquedas'} cada ${everyLabel(sch.interval_minutes)}`;
+  const base = `Búsqueda ${Math.min(c.batch_cursor, c.total_combos)} de ${c.total_combos} · ${sch.daily_profiles} perfiles/día entre ${hhmm(sch.window_start)} y ${hhmm(sch.window_end)}`;
   if (c.running) return base;
-  if (c.status === 'programada' && c.next_run_at) return `${base} · próxima: ${timeLabel(c.next_run_at)}`;
+  if (c.status === 'programada' && c.next_run_at) return `${base} · próxima: ${whenLabel(c.next_run_at)}`;
   if (c.status === 'pausada') return `${base} · en pausa`;
   return base;
 }
@@ -202,7 +231,7 @@ async function loadSide() {
   $('#sideList').innerHTML = cs.length ? cs.map(c => `
     <button class="side-item ${c.id === state.cid ? 'active' : ''}" onclick="openCampaign(${c.id})" ${c.id === state.cid ? 'aria-current="page"' : ''}>
       <b>${esc(c.name)}</b>
-      <small>${esc(c.client || 'Sin cliente')} · ${c.total} leads · ${c.running ? '⏳ ' + Math.round(c.progress*100) + '%' : c.schedule?.enabled && c.status === 'programada' ? '⏱ tanda ' + batchesDone(c) + '/' + c.batches_total : esc(statusLabel(c.status))}${ownerLabel(c)}</small>
+      <small>${esc(c.client || 'Sin cliente')} · ${c.total} leads · ${c.running ? '⏳ ' + Math.round(c.progress*100) + '%' : c.schedule?.enabled && c.status === 'programada' ? '⏱ ' + esc(whenLabel(c.next_run_at)) : esc(statusLabel(c.status))}${ownerLabel(c)}</small>
     </button>`).join('') : '<small style="color:#8ea0bb;padding:6px">Aún no hay campañas.</small>';
   return cs;
 }
@@ -218,29 +247,125 @@ async function openCampaign(id) {
   await renderCampaign(); loadSide();
 }
 
-function campaignButtons(c) {
-  const scheduled = c.schedule?.enabled;
-  if (c.running) return `<button class="btn" onclick="stopC()">■ ${scheduled ? 'Pausar' : 'Detener'}</button>`;
-  if (scheduled && c.status === 'programada') return `<button class="btn" onclick="startC()">▶ Ejecutar tanda ahora</button><button class="btn" onclick="stopC()">⏸ Pausar</button>`;
-  if (scheduled && ['pausada', 'detenida', 'error'].includes(c.status) && c.batch_cursor < c.total_combos) return `<button class="btn" onclick="startC()">▶ Reanudar</button>`;
-  if (scheduled && c.status === 'pendiente') return `<button class="btn" onclick="startC()">▶ Empezar primera tanda</button>`;
-  return `<button class="btn" onclick="startC()">↻ Ejecutar de nuevo</button>`;
+// Acción principal según el estado; el resto va al menú "⋯".
+function primaryAction(c) {
+  const sch = c.schedule?.enabled;
+  if (c.running) return `<button class="btn primary" onclick="stopC()">${sch ? 'Pausar' : 'Detener'}</button>`;
+  if (sch && c.status === 'programada') return `<button class="btn primary" onclick="stopC()">Pausar programación</button>`;
+  if (sch && c.status === 'terminada') return `<button class="btn primary" onclick="resumeC()">↻ Repetir campaña</button>`;
+  if (sch) return `<button class="btn primary" onclick="resumeC()">▶ ${c.status === 'pendiente' ? 'Activar programación' : 'Reanudar programación'}</button>`;
+  return `<button class="btn primary" onclick="startC()">${c.status === 'pendiente' ? '▶ Ejecutar' : '↻ Ejecutar de nuevo'}</button>`;
+}
+function campaignMenu(c) {
+  const runNow = c.schedule?.enabled && !c.running && c.status !== 'terminada';
+  return `<div class="menu-wrap"><button class="btn" id="campMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="campMenu" onclick="toggleMenu('campMenu', this)" aria-label="Más acciones">⋯</button>
+    <div class="menu" id="campMenu" role="menu">
+      ${runNow ? `<button role="menuitem" onclick="closeMenus();startC()">▶ Ejecutar una tanda ahora</button><hr>` : ''}
+      <button role="menuitem" onclick="closeMenus();exportC('xlsx')">⬇ Exportar a Excel</button>
+      <button role="menuitem" onclick="closeMenus();exportC('csv')">⬇ Exportar a CSV</button>
+      <hr><button role="menuitem" class="danger" onclick="closeMenus();deleteC()">Eliminar campaña</button></div></div>`;
+}
+function toggleMenu(id, btn) {
+  const m = $('#' + id), open = !m.classList.contains('open');
+  closeMenus();
+  if (open) { m.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); m.querySelector('button')?.focus(); }
+}
+function closeMenus() {
+  document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('[aria-haspopup=menu]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+}
+document.addEventListener('click', e => { if (!e.target.closest('.menu-wrap')) closeMenus(); });
+document.addEventListener('keydown', e => {
+  const m = document.querySelector('.menu.open'); if (!m) return;
+  if (e.key === 'Escape') { closeMenus(); m.parentElement.querySelector('[aria-haspopup]')?.focus(); e.stopPropagation(); }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    const items = [...m.querySelectorAll('button')], i = items.indexOf(document.activeElement);
+    items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); e.preventDefault();
+  }
+}, true);
+
+// Semáforo del cupo de perfiles respecto al máximo permitido.
+const ZONES = {good: ['Ritmo seguro', 'var(--good)'], warn: ['Cerca del máximo', 'var(--warn)'], crit: ['Al máximo diario', 'var(--crit)']};
+const zoneOf = (v, max) => v / Math.max(max, 1) >= 0.9 ? 'crit' : v / Math.max(max, 1) >= 0.6 ? 'warn' : 'good';
+const zoneBadge = z => `<span class="zone-badge ${z}" style="--zone-color:${ZONES[z][1]}">${ZONES[z][0]}</span>`;
+
+// Línea de tiempo: un punto por búsqueda y una franja de 24 h con las tandas de hoy.
+function campaignTimeline(c) {
+  const sch = c.schedule, runs = c.runs || [], total = c.total_combos;
+  const byIndex = {};
+  runs.forEach(r => { (byIndex[r.index] ||= []).push(r); });
+  const dots = Array.from({length: total}, (_, i) => {
+    const rs = byIndex[i] || [], last = rs[rs.length - 1];
+    const got = rs.reduce((n, r) => n + (r.profiles || 0), 0);
+    let cls = 'pending', label = 'pendiente';
+    if (i < c.batch_cursor) { cls = 'done'; label = 'hecha'; }
+    else if (i === c.batch_cursor && c.running) { cls = 'running'; label = 'en curso'; }
+    else if (i === c.batch_cursor && last?.status === 'error') { cls = 'error'; label = 'con error, se reintentará'; }
+    else if (i === c.batch_cursor && last?.status === 'parcial') { cls = 'partial'; label = 'cortada por el cupo, se completa en la próxima franja'; }
+    else if (i === c.batch_cursor && c.status !== 'terminada') { cls = 'next'; label = 'siguiente'; }
+    const when = last ? ` · ${whenLabel(last.at)}` : '';
+    return `<span class="tl-dot ${cls}" role="img" title="${esc(`${i + 1}. ${comboName(c, i)} · ${label}${got ? ` · ${got} perfiles` : ''}${when}`)}" aria-label="${esc(`Búsqueda ${i + 1}, ${comboName(c, i)}: ${label}`)}"></span>`;
+  }).join('');
+  const today = tzParts(Date.now() / 1000).date;
+  const pct = m => (m / 1440 * 100).toFixed(2) + '%';
+  const todayRuns = runs.filter(r => tzParts(r.at).date === today);
+  const next = c.next_run_at && tzParts(c.next_run_at).date === today ? tzParts(c.next_run_at).min : null;
+  const now = tzParts(Date.now() / 1000).min;
+  return `<div class="split" style="margin-top:18px">
+    <div><div class="k" style="margin-bottom:10px">Búsquedas · ${Math.min(c.batch_cursor, total)} de ${total} hechas${c.days_left && c.status !== 'terminada' ? ` · ${c.days_left === 1 ? 'falta ≈ 1 día' : `faltan ≈ ${c.days_left} días`}` : ''}</div>
+      <div class="tl" aria-label="Progreso por búsqueda">${dots}</div>
+      <div class="tl-legend"><span><i class="tl-dot done"></i>Hecha</span><span><i class="tl-dot next"></i>Siguiente</span><span><i class="tl-dot partial"></i>Cortada por el cupo</span><span><i class="tl-dot"></i>Pendiente</span></div></div>
+    <div><div class="k" style="margin-bottom:10px">Hoy · franja ${hhmm(sch.window_start)}–${hhmm(sch.window_end)}</div>
+      <div class="rail" role="img" aria-label="${esc(`Franja de ${hhmm(sch.window_start)} a ${hhmm(sch.window_end)}; ${todayRuns.length} tandas hoy${next != null ? '; próxima a las ' + hhmm(next) : ''}`)}">
+        <div class="track"><div class="fill" style="left:${pct(sch.window_start)};width:${pct(sch.window_end - sch.window_start)};background:var(--color-brand-100)"></div>
+          <div class="marker" style="left:${pct(now)}" title="Ahora · ${hhmm(now)}"></div>
+          ${todayRuns.map(r => `<div class="run ${r.status === 'error' ? 'error' : ''}" style="left:${pct(tzParts(r.at).min)}" title="${esc(`${tzParts(r.at).hm} · ${comboName(c, r.index)} · ${r.profiles} perfiles${r.manual ? ' · manual' : ''}`)}"></div>`).join('')}
+          ${next != null ? `<div class="next" style="left:${pct(next)}" title="Próxima tanda · ${hhmm(next)}"></div>` : ''}</div></div>
+      ${hourScale(6)}
+      <div class="tl-legend"><span><i class="tl-dot done"></i>Tanda de hoy</span><span><i class="tl-dot next"></i>Próxima</span><span><i style="width:2px;height:10px;background:#0f172a;display:inline-block"></i>Ahora</span></div></div></div>`;
+}
+function hourScale(every = 3) {
+  let out = '';
+  for (let h = 0; h <= 24; h++) {
+    const major = h % every === 0;
+    out += `<i class="${major ? 'major' : ''}" style="left:${(h / 24 * 100).toFixed(3)}%"></i>`;
+    if (major) out += `<span style="left:${(h / 24 * 100).toFixed(3)}%">${pad2(h)}</span>`;
+  }
+  return `<div class="scale" aria-hidden="true">${out}</div>`;
+}
+function statusCard(c) {
+  const pct = Math.round(c.progress * 100);
+  const log = `<details ${c.running || c.status === 'error' ? 'open' : ''} style="margin-top:16px"><summary>Registro</summary><div class="log" id="log">${esc(c.log.slice(-40).join('\n'))}</div></details>`;
+  if (!c.schedule?.enabled) {
+    return `<div class="card progress">
+      <div style="display:flex;justify-content:space-between"><b>${c.running ? 'Buscando…' : 'Estado: ' + esc(statusLabel(c.status))}</b><span class="muted">${pct}% · ${c.api_calls} llamadas a Google</span></div>
+      <div class="bar"><i style="width:${pct}%"></i></div>${log}</div>`;
+  }
+  const sch = c.schedule, z = zoneOf(c.used_today, sch.daily_profiles);
+  const state = c.running ? 'Tanda en curso' : statusLabel(c.status);
+  const next = c.running ? 'Buscando ahora…' : c.status === 'programada' && c.next_run_at ? `Próxima tanda: <b>${esc(whenLabel(c.next_run_at))}</b> · hora aleatoria dentro de la franja`
+    : c.status === 'terminada' ? 'Todas las búsquedas están hechas.' : c.status === 'pausada' ? 'En pausa. Reanuda para volver a programar tandas.' : c.status === 'error' ? 'Detenida por errores repetidos. Revisa el registro y reanuda.' : 'La programación no está activa.';
+  return `<div class="card progress">
+    <div class="status-row">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px"><span class="pill ${c.running || c.status === 'programada' ? 'live' : ''}">${c.running || c.status === 'programada' ? '●' : '○'} ${esc(state)}</span><span class="muted" style="font-size:13px">${next}</span></div>
+      <div style="min-width:240px;flex:0 1 300px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="muted">Perfiles hoy: <b style="color:#0f172a">${c.used_today}</b> de ${sch.daily_profiles}</span>${zoneBadge(z)}</div>
+        <div class="meter" style="--zone-color:${ZONES[z][1]}" role="meter" aria-valuemin="0" aria-valuemax="${sch.daily_profiles}" aria-valuenow="${c.used_today}" aria-label="Perfiles consultados hoy"><i style="width:${Math.min(100, c.used_today / sch.daily_profiles * 100)}%"></i></div></div>
+    </div>
+    ${campaignTimeline(c)}${log}</div>`;
 }
 
 async function renderCampaign(refreshOnly = false) {
   const c = state.camp = await api(`/api/campaigns/${state.cid}`);
   const s = c.stats;
-  const pct = Math.round(c.progress * 100);
   const head = `
     ${demoBanner()}
     <div class="head">
-      <div><div class="eyebrow">Descubre · prioriza · conecta</div><h1>${esc(c.name)}</h1>
+      <div><div class="eyebrow">Campaña</div><h1>${esc(c.name)}</h1>
         <div class="sub">${esc(c.client || 'Sin cliente')} · ${c.keywords.map(esc).join(', ')} · ${c.locations.map(esc).join(' / ')}<br>Servicio: ${esc(PROFILES[c.options.sales_profile || 'general'])}${ownerLabel(c)}</div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${campaignButtons(c)}<button class="btn" onclick="openSchedule()">⏱ Programación</button>
-        <button class="btn" onclick="showCompanies()">Ver empresas</button><button class="btn" onclick="exportC('csv')">CSV</button>
-        <button class="btn primary" onclick="exportC('xlsx')">⬇ Excel</button>
-        <button class="btn danger" onclick="deleteC()">Eliminar</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        ${primaryAction(c)}<button class="btn" onclick="openSchedule()">⏱ Programación</button>
+        <button class="btn" onclick="showCompanies()">Ver empresas</button>${campaignMenu(c)}
       </div>
     </div>
     <div class="tiles">
@@ -251,20 +376,22 @@ async function renderCampaign(refreshOnly = false) {
       <div class="tile"><div class="v">${s.no_web}</div><div class="l">Sin enlace web</div></div>
       <div class="tile"><div class="v">${s.avg_score}</div><div class="l">Promedio de datos</div></div>
     </div>
-    <div class="card progress">
-      <div style="display:flex;justify-content:space-between"><b>${c.running ? 'Buscando…' : 'Estado: ' + esc(statusLabel(c.status))}</b><span class="muted">${pct}% · ${c.api_calls} llamadas a Google</span></div>
-      <div class="bar"><i style="width:${pct}%"></i></div>
-      ${c.schedule?.enabled ? `<div class="muted" style="margin-top:8px">⏱ ${esc(scheduleSummary(c))}</div>` : ''}
-      <details ${c.running || c.status === 'error' ? 'open' : ''}><summary>Registro</summary><div class="log" id="log">${esc(c.log.slice(-40).join('\n'))}</div></details>
-    </div>`;
-  if (refreshOnly && $('#headWrap')) { $('#headWrap').innerHTML = head; const l = $('#log'); if (l) l.scrollTop = 1e6; }
-  else {
+    ${statusCard(c)}`;
+  if (refreshOnly && $('#headWrap')) {
+    if (document.querySelector('#campMenu.open')) return scheduleRefresh(c);   // no cerrar el menú abierto
+    const logOpen = $('#log')?.closest('details')?.open;
+    $('#headWrap').innerHTML = head;
+    const l = $('#log'); if (l) { l.scrollTop = 1e6; if (logOpen) l.closest('details').open = true; }
+  } else {
     $('#main').innerHTML = `<div id="headWrap">${head}</div>${leadsCard()}`;
     bindFilters();
   }
   await loadLeads();
-  clearInterval(state.timer);
-  if (c.running || c.status === 'programada') state.timer = setTimeout(() => { if (state.cid === c.id) { renderCampaign(true); loadSide(); } }, c.running ? 1500 : 30000);
+  scheduleRefresh(c);
+}
+function scheduleRefresh(c) {
+  clearTimeout(state.timer);
+  if (c.running || c.status === 'programada') state.timer = setTimeout(() => { if (state.cid === c.id && $('#headWrap')) { renderCampaign(true); loadSide(); } }, c.running ? 1500 : 30000);
 }
 
 function leadsCard() {
@@ -330,7 +457,7 @@ async function loadLeads() {
 
 function rowHtml(l) {
   const sc = l.opportunity_score >= 70 ? 's-hi' : l.opportunity_score >= 40 ? 's-md' : 's-lo';
-  const ch = tagsHtml(l, true);
+  const ch = tagsHtml(l);
   const opportunities = l.relevant_opportunities || [];
   return `<tr class="row" tabindex="0" aria-label="Abrir ${esc(l.name)}" onclick="openLead(${l.id})" onkeydown="if(event.target===this && (event.key==='Enter'||event.key===' ')){event.preventDefault();openLead(${l.id})}">
     <td><div class="name">${esc(l.name)}</div><div class="muted">${esc(l.category || '')}${l.city ? ' · ' + esc(l.city) : ''}</div>${opportunities.slice(0,2).map(o=>`<span class="opportunity" title="${esc(o.reason)}">↗ ${esc(o.title)}</span>`).join('')}${opportunities.length>2?`<span class="muted">+${opportunities.length-2} oportunidades</span>`:''}</td>
@@ -338,26 +465,33 @@ function rowHtml(l) {
     <td>${ch}<div class="muted" style="margin-top:5px">${esc(l.data_quality.label)} · ${l.data_quality.evidence_coverage}% de datos con procedencia</div></td>
     <td>${l.rating ? '★ ' + l.rating : '—'}<div class="muted">${l.reviews ?? ''}${l.reviews != null ? ' reseñas' : ''}</div></td>
     <td><span class="score ${sc}" title="Ver desglose al abrir el lead">${l.opportunity_score}/100</span><div class="muted">${esc(l.sales_profile_label)}<br>Datos disponibles: ${l.score}/100</div></td>
-    <td><span class="status st-${l.status}">${l.status}</span></td></tr>`;
+    <td>${statusSelect(l)}</td></tr>`;
 }
-function tagsHtml(l, clickable=false) { return `<div class="lead-tags">${(l.tags||[]).map(t=>`<${clickable?'button type="button"':'span'} class="lead-tag tag-${t.state}" title="${esc(t.detail)}" ${clickable?`onclick="event.stopPropagation();setTag('${t.key}:${t.state}')"`:''}>${t.state==='present'?'✓':t.state==='unknown'?'?':'•'} ${esc(t.label)}</${clickable?'button':'span'}>`).join('')}</div>`; }
-function setTag(tag) { F.tag=tag;state.page=1;if($('#viewTag')) {$('#viewTag').value=tag;$('#advancedFilters').open=true;}loadLeads(); }
+function tagsHtml(l) { return `<div class="lead-tags">${(l.tags||[]).map(t=>`<span class="lead-tag tag-${t.state}" title="${esc(t.detail)}">${t.state==='present'?'✓':t.state==='unknown'?'?':'•'} ${esc(t.label)}</span>`).join('')}</div>`; }
+const LEAD_STATUSES = ['nuevo', 'contactado', 'interesado', 'descartado'];
+// El estado se cambia en la propia tabla; el clic no abre el detalle.
+const statusSelect = (l, id = '') => `<select ${id ? `id="${id}"` : ''} class="status-select st-${l.status}" aria-label="Estado de ${esc(l.name)}" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()" onchange="setLeadStatus(${l.id}, this)">${LEAD_STATUSES.map(x => `<option value="${x}" ${l.status === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
+async function setLeadStatus(id, sel) {
+  const prev = (state.leads.find(x => x.id === id) || {}).status;
+  try { await api(`/api/leads/${id}`, {method: 'PATCH', body: {status: sel.value}}); }
+  catch (e) { toast(e.message); sel.value = prev; return; }
+  sel.className = 'status-select st-' + sel.value;
+  const l = state.leads.find(x => x.id === id); if (l) l.status = sel.value;
+  document.querySelectorAll(`select[onchange="setLeadStatus(${id}, this)"]`).forEach(o => { o.value = sel.value; o.className = 'status-select st-' + sel.value; });
+  toast(`Estado: ${sel.value}`);
+}
 const fmtK = n => n >= 1000 ? (n/1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : n;
 
-function openLead(id) {
+const LEAD_TABS = [['contacto', 'Contacto'], ['oportunidades', 'Oportunidades'], ['evidencia', 'Evidencia'], ['notas', 'Notas']];
+function openLead(id, tab) {
   const l = state.leads.find(x => x.id === id); if (!l) return;
+  const current = tab || state.leadTab || 'contacto';
   const link = (u, t) => safeUrl(u) ? `<a href="${esc(safeUrl(u))}" target="_blank" rel="noopener">${esc(t || u)}</a>` : '—';
   const extra = Object.entries(l.extra || {}).filter(([,v]) => v).map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
-  $('#drawer').innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:start;gap:10px">
-      <div><h2 style="margin:0 0 4px;font-size:19px">${esc(l.name)}</h2><div class="muted">${esc(l.category || '')} · fuente: ${esc(l.source)}</div><button class="btn sm" onclick="companyProfile='${l.sales_profile}';openCompany(${l.company_id})">Empresa #${l.company_id}: ${esc(l.company_name)} · ver responsables</button></div>
-      <button class="btn sm" onclick="closeDrawer()" aria-label="Cerrar detalle">✕</button></div>
-    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-      ${l.whatsapp ? `<a class="btn sm primary" target="_blank" href="${esc(l.whatsapp)}">Abrir WhatsApp</a>` : ''}
-      ${l.emails[0] ? `<a class="btn sm" href="mailto:${esc(l.emails[0])}">Enviar correo</a>` : ''}
-      ${l.maps_url ? `<a class="btn sm" target="_blank" href="${esc(l.maps_url)}">Ver en Maps</a>` : ''}
-    </div>
-    <dl class="kv">
+  const evidenceCount = Object.values(l.provenance || {}).reduce((n, r) => n + r.length, 0);
+  const counts = {oportunidades: l.opportunities.length, evidencia: evidenceCount, notas: l.notes ? '•' : ''};
+  const panels = {
+    contacto: `<dl class="kv" style="margin-top:0">
       <dt>Teléfonos</dt><dd>${(l.phones && l.phones.length ? l.phones : [l.phone || '—']).map(esc).join('<br>')}</dd>
       <dt>Correos</dt><dd>${l.emails.length ? l.emails.map(esc).join('<br>') : '—'}</dd>
       <dt>Dirección</dt><dd>${esc(l.address || '—')}</dd>
@@ -368,37 +502,72 @@ function openLead(id) {
       ${l.tiktok ? `<dt>TikTok</dt><dd>${link(l.tiktok)}</dd>` : ''}
       ${l.linkedin ? `<dt>LinkedIn</dt><dd>${link(l.linkedin)}</dd>` : ''}
       <dt>Rating</dt><dd>${l.rating ? `★ ${l.rating} (${l.reviews} reseñas)` : '—'}</dd>
-      <dt>Prioridad</dt><dd>${l.opportunity_score}/100 · ${esc(l.sales_profile_label)}</dd>
-      <dt>Datos disponibles</dt><dd>${l.score}/100</dd>
-      ${extra}
-    </dl>
-    ${tagsHtml(l)}
-    <div class="insight-box"><h3>¿Por qué esta prioridad?</h3>${l.score_breakdown.map(b=>`<div>+${b.points} · ${esc(b.reason)}</div>`).join('') || '<div>Sin señales suficientes.</div>'}<div class="muted" style="margin-top:6px">Heurística comercial; no predice una venta.</div></div>
-    <h3>Oportunidades detectadas</h3>${l.opportunities.length ? l.opportunities.map(o=>`<div class="evidence-item"><b>${esc(o.title)}</b><br>${esc(o.reason)}<br><span class="muted">Para ${o.profiles.map(p=>esc(PROFILES[p])).join(', ')}</span>${o.url?'<br>'+link(o.url,'Ver evidencia'):''}</div>`).join('') : '<p class="muted">No hay señales suficientes para detectar oportunidades.</p>'}
-    <div class="insight-box"><h3>Calidad y procedencia</h3><b>${esc(l.data_quality.label)}</b> · ${l.data_quality.evidence_coverage}% de cobertura<br>${esc(l.data_quality.email_status)}<p class="muted">${esc(l.data_quality.note)}</p></div>
-    <details><summary>Ver fuente y fecha de cada dato</summary>${Object.entries(l.provenance||{}).flatMap(([field,records])=>records.map(r=>`<div class="evidence-item"><b>${esc(FIELD_LABELS[field] || field)}: ${esc(r.value)}</b><br>${esc(SOURCE_LABELS[r.source] || r.source)} · ${esc(r.verification)} · confianza ${esc(r.confidence)}<br>${esc(dateLabel(r.observed_at))}<br>${link(r.url,'Página de origen')}</div>`)).join('') || '<p class="muted">Estos datos antiguos no tienen evidencia guardada. Vuelve a revisar la web para documentarlos.</p>'}</details>
-    <div class="insight-box"><h3>Revisión de la web</h3>${esc(REVIEW_STATES[l.web_audit.status] || 'Sin revisar')} · ${esc(dateLabel(l.web_audit.checked_at))}${l.web_audit.partial?'<br>Revisión parcial: algunas páginas no pudieron consultarse.':''}${(l.web_audit.pages||[]).map(u=>'<br>'+link(u)).join('')}<br>${l.website?`<button class="btn sm" onclick="reviewLead(${l.id},'website',this)">Volver a buscar contactos y oportunidades</button>`:''}</div>
-    <div class="field"><label>Web del negocio (puedes añadir o corregir)</label><input type="text" id="dWebsite" value="${esc(l.website || '')}" placeholder="https://negocio.com"><div class="hint">Guarda el cambio y pulsa Volver a buscar para revisar la web.</div></div>
-    <h3>Instagram</h3><div class="field"><label>Enlace del perfil</label><input type="text" id="dInstagram" value="${esc(l.instagram || '')}" placeholder="https://www.instagram.com/negocio/"><div class="hint">Puedes añadir o corregir el perfil. Guarda el cambio antes de consultarlo.</div></div>
-    <div class="insight-box">${esc(REVIEW_STATES[(l.instagram_data||{}).status] || 'Sin revisar')} · ${esc(dateLabel((l.instagram_data||{}).checked_at))}${l.instagram_data.mode?'<br>Modo: '+(l.instagram_data.mode==='web'?'Público, sin API':'API de Meta'):''}${l.instagram_data.note?'<p class="muted">'+esc(l.instagram_data.note)+'</p>':''}${l.instagram_data.title?'<br>'+esc(l.instagram_data.title):''}${(l.instagram_data.external_links||[]).map(u=>'<br>'+link(u,'Enlace publicado')).join('')}<br>${l.instagram?`<button class="btn sm" onclick="reviewLead(${l.id},'instagram',this)">Consultar perfil público sin API</button>`:''}</div>
-    <h3>LinkedIn</h3><div class="field"><label>Enlace de empresa o perfil</label><input type="text" id="dLinkedin" value="${esc(l.linkedin || '')}" placeholder="https://www.linkedin.com/company/..."><div class="hint">Se detecta desde la web o puedes añadirlo. La consulta pública procesa páginas de empresa; no accede con sesión.</div></div><p class="muted">${esc(REVIEW_STATES[l.linkedin_data.status] || 'Sin revisar')} · ${esc(dateLabel(l.linkedin_data.checked_at))}${l.linkedin_data.title?'<br>'+esc(l.linkedin_data.title):''}</p>${l.linkedin?`<button class="btn sm" onclick="reviewLead(${l.id},'linkedin',this)">Consultar página pública de empresa</button>`:''}
-    <details><summary>Cambiar asociación de empresa</summary><p class="muted">Consulta el ID en Empresas y responsables. Puedes corregir una agrupación o separar este registro; los contactos de persona permanecen en su empresa original.</p><div class="field"><label>ID de empresa</label><input id="leadCompanyId" type="number" min="1" value="${l.company_id}"></div><button class="btn sm" onclick="reassignCompany(${l.id})">Asociar a esta empresa</button> <button class="btn sm" onclick="reassignCompany(${l.id},true)">Separar en una nueva empresa</button></details>
-    <div class="field"><label>Estado</label><select id="dStatus">
-      ${['nuevo','contactado','interesado','descartado'].map(x => `<option ${l.status===x?'selected':''}>${x}</option>`).join('')}</select></div>
-    <div class="field"><label>Notas</label><textarea id="dNotes" rows="4">${esc(l.notes || '')}</textarea></div>
-    <button class="btn primary" onclick="saveLead(${l.id})">Guardar</button>`;
+      ${extra}</dl>
+      ${tagsHtml(l)}
+      <details style="margin-top:18px"><summary>Corregir o añadir enlaces</summary>
+        <div class="field"><label>Web del negocio</label><input type="text" id="dWebsite" value="${esc(l.website || '')}" placeholder="https://negocio.com"></div>
+        <div class="field"><label>Perfil de Instagram</label><input type="text" id="dInstagram" value="${esc(l.instagram || '')}" placeholder="https://www.instagram.com/negocio/"></div>
+        <div class="field"><label>Empresa o perfil de LinkedIn</label><input type="text" id="dLinkedin" value="${esc(l.linkedin || '')}" placeholder="https://www.linkedin.com/company/..."><div class="hint">Después de guardar, vuelve a revisarlos desde la pestaña Evidencia.</div></div>
+        <button class="btn sm primary" onclick="saveLead(${l.id}, 'contacto')">Guardar enlaces</button></details>`,
+    oportunidades: `<div class="insight-box" style="margin-top:0"><h3>Prioridad ${l.opportunity_score}/100 · ${esc(l.sales_profile_label)}</h3>${l.score_breakdown.map(b=>`<div>+${b.points} · ${esc(b.reason)}</div>`).join('') || '<div>Sin señales suficientes.</div>'}<div class="muted" style="margin-top:6px">Datos disponibles: ${l.score}/100. Es una heurística comercial; no predice una venta.</div></div>
+      <h3>Oportunidades detectadas</h3>${l.opportunities.length ? l.opportunities.map(o=>`<div class="evidence-item"><b>${esc(o.title)}</b><br>${esc(o.reason)}<br><span class="muted">Para ${o.profiles.map(p=>esc(PROFILES[p])).join(', ')}</span>${o.url?'<br>'+link(o.url,'Ver evidencia'):''}</div>`).join('') : '<p class="muted">No hay señales suficientes para detectar oportunidades.</p>'}
+      <h3>Empresa</h3><p class="muted">Este registro pertenece a la empresa #${l.company_id} · ${esc(l.company_name)}.</p><button class="btn sm" onclick="companyProfile='${l.sales_profile}';openCompany(${l.company_id})">Ver responsables de la empresa</button>
+      <details style="margin-top:14px"><summary>Cambiar asociación de empresa</summary><p class="muted">Consulta el ID en Empresas y responsables. Puedes corregir una agrupación o separar este registro.</p><div class="field"><label>ID de empresa</label><input id="leadCompanyId" type="number" min="1" value="${l.company_id}"></div><button class="btn sm" onclick="reassignCompany(${l.id})">Asociar a esta empresa</button> <button class="btn sm" onclick="reassignCompany(${l.id},true)">Separar en una nueva empresa</button></details>`,
+    evidencia: `<div class="insight-box" style="margin-top:0"><h3>Calidad y procedencia</h3><b>${esc(l.data_quality.label)}</b> · ${l.data_quality.evidence_coverage}% de los datos con fuente guardada<br>${esc(l.data_quality.email_status)}<p class="muted">${esc(l.data_quality.note)}</p></div>
+      <h3>Revisiones</h3>
+      <div class="evidence-item"><b>Web</b> · ${esc(REVIEW_STATES[l.web_audit.status] || 'Sin revisar')} · ${esc(dateLabel(l.web_audit.checked_at))}${l.web_audit.partial?'<br>Revisión parcial: algunas páginas no pudieron consultarse.':''}${(l.web_audit.pages||[]).map(u=>'<br>'+link(u)).join('')}${l.website?`<br><button class="btn sm" style="margin-top:6px" onclick="reviewLead(${l.id},'website',this)">Volver a buscar contactos y oportunidades</button>`:''}</div>
+      <div class="evidence-item"><b>Instagram</b> · ${esc(REVIEW_STATES[(l.instagram_data||{}).status] || 'Sin revisar')} · ${esc(dateLabel((l.instagram_data||{}).checked_at))}${l.instagram_data.mode?'<br>Modo: '+(l.instagram_data.mode==='web'?'Público, sin API':'API de Meta'):''}${l.instagram_data.note?'<br>'+esc(l.instagram_data.note):''}${l.instagram_data.title?'<br>'+esc(l.instagram_data.title):''}${(l.instagram_data.external_links||[]).map(u=>'<br>'+link(u,'Enlace publicado')).join('')}${l.instagram?`<br><button class="btn sm" style="margin-top:6px" onclick="reviewLead(${l.id},'instagram',this)">Consultar perfil público</button>`:''}</div>
+      <div class="evidence-item"><b>LinkedIn</b> · ${esc(REVIEW_STATES[l.linkedin_data.status] || 'Sin revisar')} · ${esc(dateLabel(l.linkedin_data.checked_at))}${l.linkedin_data.title?'<br>'+esc(l.linkedin_data.title):''}${l.linkedin?`<br><button class="btn sm" style="margin-top:6px" onclick="reviewLead(${l.id},'linkedin',this)">Consultar página pública de empresa</button>`:''}</div>
+      <h3>Fuente y fecha de cada dato</h3>${Object.entries(l.provenance||{}).flatMap(([field,records])=>records.map(r=>`<div class="evidence-item"><b>${esc(FIELD_LABELS[field] || field)}: ${esc(r.value)}</b><br>${esc(SOURCE_LABELS[r.source] || r.source)} · ${esc(r.verification)} · confianza ${esc(r.confidence)}<br>${esc(dateLabel(r.observed_at))}<br>${link(r.url,'Página de origen')}</div>`)).join('') || '<p class="muted">Estos datos no tienen evidencia guardada. Vuelve a revisar la web para documentarlos.</p>'}`,
+    notas: `<div class="field"><label>Notas internas</label><textarea id="dNotes" rows="8" placeholder="Llamadas, acuerdos, próximos pasos…">${esc(l.notes || '')}</textarea></div>
+      <button class="btn primary" onclick="saveLead(${l.id}, 'notas')">Guardar notas</button>`,
+  };
+  $('#drawer').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:start;gap:10px">
+      <div style="min-width:0"><h2 style="margin:0 0 4px;font-size:19px">${esc(l.name)}</h2><div class="muted">${esc([l.category, l.city].filter(Boolean).join(' · '))} · fuente: ${esc(l.source)}</div></div>
+      <button class="btn sm" onclick="closeDrawer()" aria-label="Cerrar detalle">✕</button></div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center">
+      ${statusSelect(l, 'dStatus')}
+      ${l.whatsapp ? `<a class="btn sm primary" target="_blank" rel="noopener" href="${esc(safeUrl(l.whatsapp))}">Abrir WhatsApp</a>` : ''}
+      ${l.emails[0] ? `<a class="btn sm" href="mailto:${esc(l.emails[0])}">Enviar correo</a>` : ''}
+      ${l.phone ? `<a class="btn sm" href="tel:${esc(l.phone.replace(/[^+\d]/g, ''))}">Llamar</a>` : ''}
+      ${l.maps_url ? `<a class="btn sm" target="_blank" rel="noopener" href="${esc(safeUrl(l.maps_url))}">Ver en Maps</a>` : ''}
+      <span class="score ${l.opportunity_score >= 70 ? 's-hi' : l.opportunity_score >= 40 ? 's-md' : 's-lo'}" style="margin:0 0 0 auto" title="Prioridad comercial">${l.opportunity_score}/100</span>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Secciones del lead">${LEAD_TABS.map(([k, t]) => `<button class="tab" role="tab" id="tab-${k}" aria-controls="panel-${k}" aria-selected="${k === current}" tabindex="${k === current ? 0 : -1}" onclick="leadTab('${k}')" onkeydown="tabKeys(event)">${t}${counts[k] ? `<small>${counts[k]}</small>` : ''}</button>`).join('')}</div>
+    ${LEAD_TABS.map(([k]) => `<section role="tabpanel" id="panel-${k}" aria-labelledby="tab-${k}" ${k === current ? '' : 'hidden'}>${panels[k]}</section>`).join('')}`;
   openDrawer();
 }
+function leadTab(k) {
+  state.leadTab = k;
+  document.querySelectorAll('#drawer [role=tab]').forEach(t => { const on = t.id === 'tab-' + k; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1; });
+  document.querySelectorAll('#drawer [role=tabpanel]').forEach(pn => pn.hidden = pn.id !== 'panel-' + k);
+  $('#drawer').scrollTop = 0;
+}
+function tabKeys(e) {
+  if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+  const tabs = [...document.querySelectorAll('#drawer [role=tab]')], i = tabs.indexOf(e.target);
+  const j = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+  tabs[j].focus(); tabs[j].click(); e.preventDefault();
+}
 
-async function saveLead(id) {
-  try { await api(`/api/leads/${id}`, {method: 'PATCH', body: {status: $('#dStatus').value, notes: $('#dNotes').value, website: $('#dWebsite').value.trim(), linkedin: $('#dLinkedin').value.trim(), instagram: $('#dInstagram').value.trim()}}); }
+async function saveLead(id, tab) {
+  const body = tab === 'notas' ? {notes: $('#dNotes').value}
+    : {website: $('#dWebsite').value.trim(), linkedin: $('#dLinkedin').value.trim(), instagram: $('#dInstagram').value.trim()};
+  let l;
+  try { l = await api(`/api/leads/${id}`, {method: 'PATCH', body}); }
   catch(e) {toast(e.message);return;}
-  closeDrawer(); toast('Lead actualizado'); loadLeads();
+  const request = drawerRequest;
+  toast(tab === 'notas' ? 'Notas guardadas' : 'Enlaces guardados');
+  await loadLeads();
+  if (request !== drawerRequest || !$('#drawer.open')) return;
+  if (!state.leads.some(x => x.id === id)) state.leads.push(l);
+  openLead(id, tab);
 }
 async function reviewLead(id, kind, button) {
   const request=drawerRequest;
   button.disabled=true;button.textContent='Revisando…';
-  try {const l=await api(`/api/leads/${id}/review-${kind}?sales_profile=${encodeURIComponent(F.sales_profile)}`,{method:'POST'});await loadLeads();if(request!==drawerRequest || !$('#drawer.open')) return;const index=state.leads.findIndex(x=>x.id===id);if(index<0) state.leads.push(l);openLead(id);toast('Revisión terminada');}
+  try {const l=await api(`/api/leads/${id}/review-${kind}?sales_profile=${encodeURIComponent(F.sales_profile)}`,{method:'POST'});await loadLeads();if(request!==drawerRequest || !$('#drawer.open')) return;const index=state.leads.findIndex(x=>x.id===id);if(index<0) state.leads.push(l);openLead(id,'evidencia');toast('Revisión terminada');}
   catch(e) {toast(e.message);button.disabled=false;button.textContent='Volver a revisar';}
 }
 
@@ -415,31 +584,83 @@ async function startC() {
   try { await api(`/api/campaigns/${state.cid}/start`, {method: 'POST'}); } catch (e) { return toast(e.message); }
   toast(state.camp?.schedule?.enabled ? 'Tanda en curso' : 'Campaña en curso'); renderCampaign(); loadSide();
 }
+async function resumeC() {
+  try { await api(`/api/campaigns/${state.cid}/resume`, {method: 'POST'}); } catch (e) { return toast(e.message); }
+  toast('Programación activa'); renderCampaign(); loadSide();
+}
+
+// ---------- control de programación: franja de 24 h + perfiles por día con semáforo ----------
+const W_STEP = 30, W_MIN = 60;
+const searchSize = (sources, o) => sources.includes('google_maps') ? (o.maps_mode === 'web' ? (o.maps_max_results || 40) : (o.max_pages || 3) * 20)
+  : sources.includes('rues') ? (o.rues_limit || 100) : 40;
+// Pinta el control dentro de `el`. ctx() devuelve {searches, done, size} para la vista previa.
+function scheduleControl(el, sch, ctx) {
+  const cap = Math.max(10, +(state.settings.max_profiles_day || 300));
+  const qMax = Math.max(10, cap - cap % 10);
+  const daily = Math.min(Math.max(10, Math.round((sch.daily_profiles || 100) / 10) * 10), qMax);
+  const pct = (v, max) => (v / max * 100).toFixed(3) + '%';
+  // Marcas en los cambios de color del semáforo: 60 % (advertencia) y 90 % (máximo).
+  const qTicks = [10, Math.round(qMax * 0.6 / 10) * 10, Math.round(qMax * 0.9 / 10) * 10, qMax].filter((v, i, a) => a.indexOf(v) === i);
+  el.innerHTML = `
+    <div class="sched">
+      <div class="sched-head"><label id="${el.id}-wl">Franja horaria de activación</label><div class="sched-value" data-w></div></div>
+      <div class="rail" data-wrail>
+        <div class="track"><div class="fill" data-wfill></div></div>
+        <input type="range" min="0" max="1440" step="${W_STEP}" value="${sch.window_start}" data-a aria-label="Hora de inicio de la franja">
+        <input type="range" min="0" max="1440" step="${W_STEP}" value="${sch.window_end}" data-b aria-label="Hora de fin de la franja">
+      </div>
+      ${hourScale(3)}
+      <p class="sched-note">Cada día, las tandas se activan a <b>horas aleatorias</b> dentro de esta franja, nunca fuera de ella. Hora de ${esc(appTz().replace('_', ' '))}.</p>
+    </div>
+    <div class="sched">
+      <div class="sched-head"><label>Perfiles máximos por día</label><div style="display:flex;align-items:center;gap:10px"><span class="sched-value" data-q></span><span data-badge></span></div></div>
+      <div class="rail" data-qrail>
+        <div class="track"><div class="zone" style="left:0;width:60%;background:var(--good)"></div><div class="zone" style="left:60%;width:30%;background:var(--warn)"></div><div class="zone" style="left:90%;width:10%;background:var(--crit)"></div><div class="fill" data-qfill style="left:0"></div></div>
+        <input type="range" min="10" max="${qMax}" step="10" value="${daily}" data-q-in aria-label="Perfiles máximos por día">
+      </div>
+      <div class="scale" aria-hidden="true">${qTicks.map(v => `<i class="major" style="left:${pct(v - 10, qMax - 10)}"></i><span style="left:${pct(v - 10, qMax - 10)}">${v}</span>`).join('')}</div>
+      <p class="sched-note" data-plan></p>
+    </div>`;
+  const A = el.querySelector('[data-a]'), B = el.querySelector('[data-b]'), Q = el.querySelector('[data-q-in]');
+  const paint = () => {
+    const a = +A.value, b = +B.value, q = +Q.value, z = zoneOf(q, qMax);
+    el.querySelector('[data-wfill]').style.cssText = `left:${pct(a, 1440)};width:${pct(b - a, 1440)}`;
+    el.querySelector('[data-w]').innerHTML = `${hhmm(a)} – ${hhmm(b)}<small>${(b - a) / 60} h</small>`;
+    A.setAttribute('aria-valuetext', hhmm(a)); B.setAttribute('aria-valuetext', hhmm(b));
+    A.style.zIndex = a > 1440 - 180 ? 3 : 2;            // que el inicio siga arrastrable cerca del final
+    const f = el.querySelector('[data-qfill]');
+    f.style.width = pct(q - 10, qMax - 10); f.style.background = ZONES[z][1];
+    Q.style.setProperty('--thumb-color', ZONES[z][1]);
+    Q.setAttribute('aria-valuetext', `${q} perfiles por día, ${ZONES[z][0].toLowerCase()}`);
+    el.querySelector('[data-q]').innerHTML = `${q}<small>perfiles/día</small>`;
+    el.querySelector('[data-badge]').innerHTML = zoneBadge(z);
+    const c = ctx(), size = Math.min(c.size, q), perDay = Math.max(1, Math.floor(q / size));
+    const left = Math.max(c.searches - (c.done || 0), 0), days = left ? Math.ceil(left * size / q) : 0;
+    el.querySelector('[data-plan]').innerHTML = (c.searches ? `Cada búsqueda trae hasta <b>${size}</b> perfiles → unas <b>${perDay}</b> ${perDay === 1 ? 'tanda' : 'tandas'} al día entre ${hhmm(a)} y ${hhmm(b)}. `
+      + (left ? `Con ${left} ${left === 1 ? 'búsqueda pendiente' : 'búsquedas pendientes'}, terminaría en ${days === 1 ? '<b>1 día</b>' : `unos <b>${days} días</b>`}. ` : '') : 'Escribe palabras clave y ubicaciones para ver el plan. ')
+      + `<br>El tope del servidor es ${cap} perfiles al día entre todas las campañas.`;
+  };
+  A.oninput = () => { if (+A.value > +B.value - W_MIN) A.value = +B.value - W_MIN; paint(); };
+  B.oninput = () => { if (+B.value < +A.value + W_MIN) B.value = +A.value + W_MIN; paint(); };
+  Q.oninput = paint;
+  paint();
+  el.refresh = paint;
+  el.value = () => ({window_start: +A.value, window_end: +B.value, daily_profiles: +Q.value});
+  return el;
+}
 function openSchedule() {
-  const sch = state.camp.schedule, [n, unit] = splitMinutes(sch.interval_minutes);
-  $('#schEnabled').checked = sch.enabled; $('#schPerBatch').value = sch.combos_per_batch;
-  $('#schEvery').value = n; $('#schEveryUnit').value = unit;
-  schPreview(); $('#schModal').classList.add('open');
+  const c = state.camp;
+  $('#schEnabled').checked = c.schedule.enabled;
+  scheduleControl($('#schCtl'), c.schedule, () => ({searches: c.total_combos, done: c.batch_cursor, size: searchSize(c.sources, c.options)}));
+  schToggle(); $('#schModal').classList.add('open');
 }
-function scheduleText(total, perBatch, minutes) {
-  const batches = Math.ceil(total / perBatch);
-  const span = (batches - 1) * minutes;
-  return `<b>${total}</b> ${total === 1 ? 'búsqueda' : 'búsquedas'} en <b>${batches}</b> ${batches === 1 ? 'tanda' : 'tandas'}` +
-    (batches > 1 ? `, una cada <b>${everyLabel(minutes)}</b> · terminaría en unas <b>${durationLabel(span)}</b>.` : '.');
-}
-function schPreview() {
+function schToggle() {
   const on = $('#schEnabled').checked;
-  ['#schPerBatch', '#schEvery', '#schEveryUnit'].forEach(id => $(id).disabled = !on);
-  const minutes = +$('#schEvery').value * +$('#schEveryUnit').value;
-  $('#schPreview').innerHTML = !on ? 'Al ejecutar, la campaña hará todas las búsquedas seguidas.'
-    : minutes < 5 || minutes > 10080 ? 'El intervalo debe estar entre 5 minutos y 7 días.'
-    : scheduleText(state.camp.total_combos, Math.max(1, +$('#schPerBatch').value || 1), minutes) +
-      (state.camp.batch_cursor ? `<br>Ya hechas: ${state.camp.batch_cursor} de ${state.camp.total_combos}; se continúa desde ahí.` : '');
+  $('#schCtl').hidden = !on; $('#schPreview').hidden = on;
 }
 async function saveSchedule() {
   try {
-    await api(`/api/campaigns/${state.cid}/schedule`, {method: 'PUT', body: {enabled: $('#schEnabled').checked,
-      combos_per_batch: +$('#schPerBatch').value, interval_minutes: +$('#schEvery').value * +$('#schEveryUnit').value}});
+    await api(`/api/campaigns/${state.cid}/schedule`, {method: 'PUT', body: {enabled: $('#schEnabled').checked, ...$('#schCtl').value()}});
     closeModals(); toast('Programación guardada'); renderCampaign(); loadSide();
   } catch (e) { toast(e.message); }
 }
@@ -450,7 +671,7 @@ async function deleteC() {
 }
 
 // ---------- nueva campaña ----------
-function toggleSchedule() { $('#scheduleOpts').style.display = $('#fRunMode').value === 'batches' ? 'grid' : 'none'; }
+function toggleSchedule() { $('#scheduleOpts').hidden = $('#fRunMode').value !== 'batches'; }
 function toggleRues() { $('#ruesOpts').style.display = document.querySelector('[value=rues]').checked ? 'grid' : 'none'; }
 function toggleMapsMode() {
   const web = $('#fMapsMode').value === 'web';
@@ -468,8 +689,7 @@ function formData() {
       max_pages: +$('#fPages').value, min_rating: $('#fRating').value ? +$('#fRating').value : null,
       region: $('#fRegion').value.trim().toUpperCase(), rues_since: $('#fSince').value.trim(),
       rues_ciiu: $('#fCiiu').value.trim(), rues_cross_maps: !$('#fCross').disabled && $('#fCross').checked,
-      schedule: {enabled: $('#fRunMode').value === 'batches', combos_per_batch: +$('#fPerBatch').value || 1,
-        interval_minutes: (+$('#fEvery').value || 1) * +$('#fEveryUnit').value}}
+      schedule: {enabled: $('#fRunMode').value === 'batches', ...($('#scheduleOpts').value ? $('#scheduleOpts').value() : {})}}
   };
 }
 async function updateEstimate() {
@@ -479,7 +699,7 @@ async function updateEstimate() {
   try { e = await api('/api/estimate', {method: 'POST', body: d}); }
   catch (err) { $('#estimate').textContent = 'Revisa las opciones: ' + err.message; return; }
   const sch = d.options.schedule;
-  const plan = sch.enabled ? '<br>⏱ ' + scheduleText(e.queries, sch.combos_per_batch, sch.interval_minutes) + ' La primera tanda empieza al crear la campaña.' : '';
+  const plan = sch.enabled ? `<br>⏱ La primera tanda se activará a una hora aleatoria entre ${hhmm(sch.window_start)} y ${hhmm(sch.window_end)}.` : '';
   $('#estimate').innerHTML = state.settings.demo_mode === '1'
     ? `<b>${e.queries}</b> consultas · modo demostración (sin costo)`
     : e.maps_mode === 'web'
@@ -490,11 +710,17 @@ async function updateEstimate() {
 function openNew() {
   $('#newModal').classList.add('open'); $('#fKw').focus();
   toggleMapsMode();
+  if (!$('#scheduleOpts').value) {
+    scheduleControl($('#scheduleOpts'), {window_start: 480, window_end: 1080, daily_profiles: 100}, () => {
+      const d = formData(); return {searches: d.keywords.length * d.locations.length, done: 0, size: searchSize(d.sources, d.options)}; });
+    $('#scheduleOpts').querySelectorAll('input[type=range]').forEach(i => i.addEventListener('change', updateEstimate));
+  }
   toggleSchedule();
-  ['#fKw','#fLoc','#fPages','#fMapsLimit','#fRating','#fPerBatch','#fEvery'].forEach(s => $(s).oninput = updateEstimate);
-  $('#fEveryUnit').onchange = updateEstimate;
-  document.querySelectorAll('[name=src]').forEach(i => i.addEventListener('change', updateEstimate));
-  updateEstimate();
+  const refresh = () => { updateEstimate(); $('#scheduleOpts').refresh(); };
+  ['#fKw','#fLoc','#fPages','#fMapsLimit','#fRating'].forEach(s => $(s).oninput = refresh);
+  $('#fMapsMode').onchange = () => { toggleMapsMode(); refresh(); };
+  document.querySelectorAll('[name=src]').forEach(i => i.onchange = refresh);
+  refresh();
 }
 async function createCampaign() {
   const d = formData();
@@ -514,13 +740,18 @@ async function openSettings() {
   $('#sDemo').checked = s.demo_mode === '1'; $('#sGoogle').value = s.google_api_key;
   $('#sPrice').value = s.price_per_1000; $('#sMeta').value = s.meta_token;
   $('#sIg').value = s.ig_user_id; $('#sSocrata').value = s.socrata_token;
+  $('#sTz').innerHTML = Object.entries(s.timezones || {}).map(([v, l]) => `<option value="${esc(v)}" ${v === s.timezone ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  $('#sCap').value = s.max_profiles_day; $('#sCapUsed').textContent = `Hoy van ${s.profiles_used_today}.`;
   $('#setModal').classList.add('open');
 }
 async function saveSettings() {
-  state.settings = await api('/api/settings', {method: 'POST', body: {
-    demo_mode: $('#sDemo').checked ? '1' : '0', google_api_key: $('#sGoogle').value,
-    price_per_1000: $('#sPrice').value, meta_token: $('#sMeta').value,
-    ig_user_id: $('#sIg').value, socrata_token: $('#sSocrata').value}});
+  try {
+    state.settings = await api('/api/settings', {method: 'POST', body: {
+      demo_mode: $('#sDemo').checked ? '1' : '0', google_api_key: $('#sGoogle').value,
+      price_per_1000: $('#sPrice').value, meta_token: $('#sMeta').value,
+      ig_user_id: $('#sIg').value, socrata_token: $('#sSocrata').value, timezone: $('#sTz').value, max_profiles_day: $('#sCap').value}});
+  } catch (e) { return toast(e.message); }
+  if ($('#scheduleOpts').value) $('#scheduleOpts').value = null;   // el tope cambia la barra de perfiles
   closeModals(); toast('Ajustes guardados');
   state.cid ? renderCampaign() : init();
 }
@@ -634,6 +865,334 @@ async function resetUserPassword(id) {
   try { await api(`/api/users/${id}/password`, {method: 'POST', body: {password: pw}}); toast('Contraseña restablecida'); loadUsers(); } catch (e) { toast(e.message); }
 }
 
+// ---------- base de datos general (solo administradores) ----------
+const MF0 = {q:'', city:'', category:'', has_email:false, has_phone:false, has_wa:false, has_web:false, no_web:false, has_ig:false,
+  updated_days:0, min_quality:0, excluded:'hide', not_delivered_to:'', never_delivered:false, delivery_id:0};
+const MF = {...MF0};
+let masterTab = 'records', masterPage = 1, masterSort = 'quality', masterRequest = 0, masterTimer, masterTotal = 0;
+const utcLabel = v => v ? new Date(/[zZ]|[+-]\d\d:\d\d$/.test(v) ? v : v.replace(' ', 'T') + 'Z').toLocaleDateString('es-CO', {day:'numeric', month:'short', year:'numeric'}) : '—';
+function masterParams(extra = {}) {
+  const p = new URLSearchParams();
+  Object.entries({...MF, ...extra}).forEach(([k, v]) => { if (v && !(k === 'excluded' && v === 'hide')) p.set(k, v); });
+  return p;
+}
+async function showMaster(tab = 'records') {
+  if (!state.me?.is_admin) return toast('Solo un administrador puede ver la base de datos');
+  setView('Base de datos'); clearTimeout(state.timer); state.cid = null; loadSide(); masterTab = tab;
+  const [s, f] = await Promise.all([api('/api/master/stats'), api('/api/master/facets')]);
+  state.masterFacets = f;
+  const tabBtn = (id, label) => `<button class="btn sm ${masterTab === id ? 'primary' : ''}" onclick="showMaster('${id}')">${label}</button>`;
+  $('#main').innerHTML = `<div class="head"><div><div class="eyebrow">Activo del negocio</div><h1>Base de datos general</h1>
+      <div class="sub">Un registro por negocio, alimentado por las campañas reales de todo el equipo. Los datos de demostración no entran.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="masterResync(this)">↻ Resincronizar</button><button class="btn primary" onclick="openExport()">⬇ Exportar / entregar</button></div></div>
+    <div class="tiles">${[[s.total, 'Negocios'], [s.email, 'Con correo'], [s.phone, 'Con teléfono'], [s.wa, 'Con WhatsApp'], [s.web, 'Con web'], [s.cities, 'Ciudades'],
+      [s.delivered_records, `Entregados · ${s.deliveries} ${s.deliveries === 1 ? 'entrega' : 'entregas'}`], [s.excluded, 'Excluidos']]
+      .map(([v, l]) => `<div class="tile"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin:0 0 14px">${tabBtn('records', 'Registros')}${tabBtn('deliveries', 'Entregas')}${tabBtn('exclusions', 'Exclusiones')}</div>
+    <div id="masterBody"></div>
+    <datalist id="mCities">${f.cities.map(c => `<option value="${esc(c.value)}">${c.n}</option>`).join('')}</datalist>
+    <datalist id="mCats">${f.categories.map(c => `<option value="${esc(c.value)}">${c.n}</option>`).join('')}</datalist>`;
+  if (!s.total && !s.excluded && tab === 'records') {
+    $('#masterBody').innerHTML = `<div class="card empty"><h2>La base todavía está vacía</h2><p>Se llena sola con cada campaña que ejecutes tú o tu equipo con datos reales.
+      Si estás en modo demostración, desactívalo en <a href="#" onclick="openSettings();return false">Ajustes</a>: los datos ficticios no entran en la base.</p></div>`;
+    return;
+  }
+  if (tab === 'records') renderMasterRecords();
+  else if (tab === 'deliveries') renderDeliveries();
+  else renderExclusions();
+}
+function renderMasterRecords() {
+  const chk = (k, l) => `<label class="chip"><input type="checkbox" ${MF[k] ? 'checked' : ''} onchange="MF.${k}=this.checked;masterPage=1;loadMaster()">${l}</label>`;
+  const clients = state.masterFacets.clients;
+  const delivery = MF.delivery_id ? `delivery:${MF.delivery_id}` : MF.never_delivered ? 'never' : MF.not_delivered_to ? 'client:' + MF.not_delivered_to : '';
+  $('#masterBody').innerHTML = `<div class="card"><div class="card-title"><div><h2>Registros</h2><p>Abre un negocio para ver de qué campañas viene, editarlo, fusionarlo o excluirlo.</p></div><button class="btn sm ghost" onclick="Object.assign(MF, MF0);masterPage=1;renderMasterRecords()">Limpiar filtros</button></div>
+    <div class="filters"><input id="mQ" type="search" aria-label="Buscar en la base" placeholder="Buscar nombre, categoría, dirección, web o correo…" value="${esc(MF.q)}">
+      <input id="mCity" type="text" list="mCities" aria-label="Ciudad" placeholder="Ciudad" value="${esc(MF.city)}" style="width:12rem;flex:none">
+      <input id="mCat" type="text" list="mCats" aria-label="Categoría" placeholder="Categoría" value="${esc(MF.category)}" style="width:12rem;flex:none"></div>
+    <div class="filters">${chk('has_email', 'Con correo')}${chk('has_phone', 'Con teléfono')}${chk('has_wa', 'Con WhatsApp')}${chk('has_web', 'Con web')}${chk('no_web', 'Sin web')}${chk('has_ig', 'Con Instagram')}
+      <select id="mDays" aria-label="Actualización"><option value="0">Cualquier fecha</option>${[30, 90, 180, 365].map(d => `<option value="${d}" ${+MF.updated_days === d ? 'selected' : ''}>Actualizados en ${d} días</option>`).join('')}</select>
+      <select id="mQuality" aria-label="Completitud mínima"><option value="0">Cualquier completitud</option>${[25, 50, 75].map(q => `<option value="${q}" ${+MF.min_quality === q ? 'selected' : ''}>Completitud ≥ ${q}</option>`).join('')}</select>
+      <select id="mDelivery" aria-label="Entregas"><option value="">Entregados o no</option><option value="never" ${delivery === 'never' ? 'selected' : ''}>Nunca entregados</option>
+        ${clients.map(c => `<option value="client:${esc(c.value)}" ${delivery === 'client:' + c.value ? 'selected' : ''}>No entregados a ${esc(c.value)}</option>`).join('')}
+        ${MF.delivery_id ? `<option value="delivery:${MF.delivery_id}" selected>Solo la entrega #${MF.delivery_id}</option>` : ''}</select>
+      <select id="mExcluded" aria-label="Excluidos"><option value="hide">Sin excluidos</option><option value="only" ${MF.excluded === 'only' ? 'selected' : ''}>Solo excluidos</option></select>
+      <select id="mSort" aria-label="Orden">${Object.entries({quality:'Más completos', recent:'Más recientes', name:'Nombre', rating:'Rating', reviews:'Reseñas', sources:'Más fuentes'}).map(([v, l]) => `<option value="${v}" ${masterSort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="table-wrap"><table><thead><tr><th>Negocio</th><th>Contacto</th><th>Presencia</th><th>Origen</th><th>Completitud</th></tr></thead><tbody id="masterRows"></tbody></table></div>
+    <div class="pager" id="masterPager"></div></div>`;
+  const later = fn => { clearTimeout(masterTimer); masterTimer = setTimeout(fn, 250); };
+  $('#mQ').oninput = e => later(() => { MF.q = e.target.value.trim(); masterPage = 1; loadMaster(); });
+  $('#mCity').oninput = e => later(() => { MF.city = e.target.value.trim(); masterPage = 1; loadMaster(); });
+  $('#mCat').oninput = e => later(() => { MF.category = e.target.value.trim(); masterPage = 1; loadMaster(); });
+  $('#mDays').onchange = e => { MF.updated_days = +e.target.value; masterPage = 1; loadMaster(); };
+  $('#mQuality').onchange = e => { MF.min_quality = +e.target.value; masterPage = 1; loadMaster(); };
+  $('#mExcluded').onchange = e => { MF.excluded = e.target.value; masterPage = 1; loadMaster(); };
+  $('#mSort').onchange = e => { masterSort = e.target.value; masterPage = 1; loadMaster(); };
+  $('#mDelivery').onchange = e => {
+    const [kind, value] = [e.target.value.split(':')[0], e.target.value.split(':').slice(1).join(':')];
+    Object.assign(MF, {never_delivered: kind === 'never', not_delivered_to: kind === 'client' ? value : '', delivery_id: kind === 'delivery' ? +value : 0});
+    masterPage = 1; loadMaster();
+  };
+  loadMaster();
+}
+const mlink = (url, text) => safeUrl(url) ? `<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(text)}</a>` : '';
+async function loadMaster() {
+  const request = ++masterRequest;
+  const p = masterParams({page: masterPage, per_page: 50, sort: masterSort});
+  const data = await api('/api/master/records?' + p);
+  if (request !== masterRequest || !$('#masterRows')) return;
+  masterTotal = data.total;
+  $('#masterRows').innerHTML = data.items.length ? data.items.map(r => `<tr class="row" tabindex="0" aria-label="Abrir ${esc(r.name)}" onclick="openMaster(${r.id})" onkeydown="if(event.key==='Enter'){openMaster(${r.id})}">
+      <td><b>${esc(r.name)}</b>${r.excluded ? ' <span class="lead-tag tag-unknown">Excluido</span>' : ''}<div class="muted">${esc([r.category, r.city].filter(Boolean).join(' · '))}<br>ID ${r.id}</div></td>
+      <td>${[r.phone, ...r.phones.filter(x => x !== r.phone)].slice(0, 2).map(esc).join('<br>')}${r.whatsapp ? '<br><span class="muted">WhatsApp</span>' : ''}
+        <div class="muted">${r.emails.slice(0, 3).map(e => esc(e) + (r.email_kinds[e] === 'personal' ? ' <span class="lead-tag tag-missing">personal</span>' : '')).join('<br>')}${r.emails.length > 3 ? '<br>+' + (r.emails.length - 3) : ''}</div></td>
+      <td>${[mlink(r.website, 'Web'), mlink(r.instagram, 'Instagram'), mlink(r.facebook, 'Facebook'), mlink(r.linkedin, 'LinkedIn'), mlink(r.maps_url, 'Maps')].filter(Boolean).join(' · ') || '<span class="muted">—</span>'}
+        ${r.rating ? `<div class="muted">★ ${r.rating} · ${r.reviews || 0} reseñas</div>` : ''}</td>
+      <td>${r.campaign_count} ${r.campaign_count === 1 ? 'campaña' : 'campañas'} · ${r.owner_count} ${r.owner_count === 1 ? 'usuario' : 'usuarios'}<div class="muted">${esc(r.sources.join(', '))}<br>Último dato: ${esc(utcLabel(r.last_seen))}</div></td>
+      <td><span class="score">${r.quality}/100</span>${r.delivered ? `<div class="muted">Entregado ${r.delivered} ${r.delivered === 1 ? 'vez' : 'veces'}</div>` : ''}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="empty">No hay registros con estos filtros.</td></tr>';
+  const pages = Math.max(1, Math.ceil(data.total / data.per_page));
+  $('#masterPager').innerHTML = `<span>${data.total} ${data.total === 1 ? 'registro' : 'registros'} con estos filtros</span><span><button class="btn sm" ${masterPage <= 1 ? 'disabled' : ''} onclick="masterPage--;loadMaster()">‹</button> ${masterPage} de ${pages} <button class="btn sm" ${masterPage >= pages ? 'disabled' : ''} onclick="masterPage++;loadMaster()">›</button></span>`;
+}
+async function openMaster(id) {
+  const request = ++drawerRequest;
+  let r;
+  try { r = await api(`/api/master/records/${id}`); } catch (e) { return toast(e.message); }
+  if (request !== drawerRequest) return;
+  const field = (label, value) => value ? `<div><span class="muted">${label}:</span> ${value}</div>` : '';
+  $('#drawer').innerHTML = `<div style="display:flex;justify-content:space-between;gap:12px"><h2>${esc(r.name)}</h2><button class="btn sm" onclick="closeDrawer()" aria-label="Cerrar detalle">✕</button></div>
+    <div class="muted">Registro #${r.id} · completitud ${r.quality}/100 · primera vez visto ${esc(utcLabel(r.first_seen))} · último dato ${esc(utcLabel(r.last_seen))}${r.locked.length ? '<br>Campos corregidos a mano: ' + r.locked.map(esc).join(', ') : ''}</div>
+    ${r.excluded ? `<div class="insight-box"><b>Excluido de la base.</b> Sus datos de contacto se borraron de la base y nunca se exportan. Los datos siguen en las campañas de origen.<br><button class="btn sm" style="margin-top:8px" onclick="masterInclude(${r.id})">Volver a incluir</button></div>` : ''}
+    <h3>Datos del negocio</h3><div class="evidence-item">
+      ${field('Categoría', esc(r.category))}${field('Dirección', esc(r.address))}${field('Ciudad', esc(r.city))}
+      ${field('Teléfonos', [r.phone, ...r.phones.filter(x => x !== r.phone)].filter(Boolean).map(esc).join(', '))}${field('WhatsApp', mlink(r.whatsapp, r.whatsapp || ''))}
+      ${field('Correos', r.emails.map(e => esc(e) + (r.email_kinds[e] === 'personal' ? ' <span class="lead-tag tag-missing">posible dato personal</span>' : '')).join('<br>'))}
+      ${field('Web', mlink(r.website, r.website || ''))}${field('Redes', [mlink(r.instagram, 'Instagram'), mlink(r.facebook, 'Facebook'), mlink(r.tiktok, 'TikTok'), mlink(r.linkedin, 'LinkedIn')].filter(Boolean).join(' · '))}
+      ${field('Google Maps', mlink(r.maps_url, 'Abrir ficha'))}${field('Valoración', r.rating ? `★ ${r.rating} · ${r.reviews || 0} reseñas` : '')}${field('Estado', esc(r.business_status))}
+      ${field('Datos RUES', Object.entries(r.extra || {}).map(([k, v]) => esc(k + ': ' + v)).join('<br>'))}${field('Web revisada', esc(utcLabel(r.verified_at)))}</div>
+    <h3>Notas internas</h3><textarea id="mNotes" rows="3">${esc(r.notes)}</textarea><button class="btn sm" style="margin-top:6px" onclick="saveMaster(${r.id}, {notes: $('#mNotes').value})">Guardar notas</button>
+    <h3>Campañas de origen (${r.leads.length})</h3>${r.leads.map(l => `<div class="evidence-item"><b>${esc(l.campaign_name)}</b> · ${esc(l.owner_name || 'sin dueño')}<br><span class="muted">${esc(l.source)} · lead #${l.id} · ${esc(l.created_at)}</span></div>`).join('') || '<p class="muted">Sus campañas de origen se eliminaron; el registro se conserva en la base.</p>'}
+    <h3>Personas de contacto</h3>${r.people.length ? r.people.map(p => `<div class="evidence-item"><b>${esc(p.name || 'Sin nombre')}</b> · ${esc(p.role || 'cargo por confirmar')}<br><span class="muted">${esc(RELATION_LABELS[p.relationship] || p.relationship)}</span>${p.linkedin ? '<br>' + mlink(p.linkedin, 'LinkedIn') : ''}${p.emails.length ? '<br>' + p.emails.map(esc).join(', ') : ''}</div>`).join('') + '<p class="muted">Son datos personales: solo se exportan si marcas "Incluir datos personales", y solo los vínculos confirmados o publicados.</p>' : '<p class="muted">Sin personas asociadas.</p>'}
+    <h3>Entregas</h3>${r.deliveries.length ? r.deliveries.map(d => `<div class="evidence-item">Entrega #${d.id} · <b>${esc(d.client)}</b> · ${esc(utcLabel(d.created_at))}</div>`).join('') : '<p class="muted">Nunca entregado.</p>'}
+    <details><summary>Corregir datos</summary>
+      <div class="field"><label>Nombre</label><input id="mName" value="${esc(r.name)}" maxlength="200"></div>
+      <div class="grid2"><div class="field"><label>Categoría</label><input id="mCategory" value="${esc(r.category || '')}"></div><div class="field"><label>Ciudad</label><input id="mCityEdit" value="${esc(r.city || '')}"></div></div>
+      <div class="field"><label>Dirección</label><input id="mAddress" value="${esc(r.address || '')}"></div>
+      <p class="muted">Los campos corregidos ya no se sobrescriben con datos de nuevas campañas.</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm primary" onclick="saveMaster(${r.id}, {name: $('#mName').value, category: $('#mCategory').value, city: $('#mCityEdit').value, address: $('#mAddress').value})">Guardar corrección</button>
+      ${r.locked.length ? `<button class="btn sm" onclick="saveMaster(${r.id}, {unlock: true})">Volver a datos automáticos</button>` : ''}</div></details>
+    <details><summary>Fusionar con otro registro</summary><p class="muted">Si este negocio está duplicado, pásalo a otro registro: se combinan campañas, datos y entregas, y este registro desaparece.</p>
+      <div style="display:flex;gap:6px"><input id="mMergeInto" type="number" min="1" placeholder="ID del registro que se queda"><button class="btn sm" onclick="masterMerge(${r.id})">Fusionar</button></div></details>
+    ${r.excluded ? '' : `<details><summary>Excluir de la base</summary><p class="muted">Para negocios o personas que pidieron no figurar. Se borran sus datos de contacto de la base, se bloquean su dominio y teléfonos para futuras campañas y nunca se exporta.</p>
+      <div class="field"><label>Motivo</label><input id="mExReason" placeholder="Solicitud por correo del 12/10/2026"></div><button class="btn sm danger" onclick="masterExclude(${r.id})">Excluir</button></details>`}`;
+  openDrawer();
+}
+async function saveMaster(id, body) {
+  try { await api(`/api/master/records/${id}`, {method: 'PATCH', body}); toast('Registro actualizado'); openMaster(id); if ($('#masterRows')) loadMaster(); } catch (e) { toast(e.message); }
+}
+async function masterMerge(id) {
+  const into = +$('#mMergeInto').value;
+  if (!into) return toast('Escribe el ID del registro que se queda');
+  if (!confirm(`¿Fusionar el registro #${id} dentro del #${into}? Esta acción no se puede deshacer.`)) return;
+  try { await api(`/api/master/records/${id}/merge`, {method: 'POST', body: {into}}); toast('Registros fusionados'); openMaster(into); if ($('#masterRows')) loadMaster(); } catch (e) { toast(e.message); }
+}
+async function masterExclude(id) {
+  if (!confirm('¿Excluir este negocio de la base? Se borrarán sus datos de contacto de la base general.')) return;
+  try { await api(`/api/master/records/${id}/exclude`, {method: 'POST', body: {reason: $('#mExReason').value}}); toast('Excluido de la base'); openMaster(id); if ($('#masterRows')) loadMaster(); } catch (e) { toast(e.message); }
+}
+async function masterInclude(id) {
+  try { await api(`/api/master/records/${id}/include`, {method: 'POST'}); toast('Incluido de nuevo'); openMaster(id); if ($('#masterRows')) loadMaster(); } catch (e) { toast(e.message); }
+}
+async function masterResync(btn) {
+  btn.disabled = true; btn.textContent = 'Resincronizando…';
+  try { const r = await api('/api/master/resync', {method: 'POST'}); toast(`Base actualizada · ${r.total} negocios`); showMaster(masterTab); }
+  catch (e) { toast(e.message); btn.disabled = false; btn.textContent = '↻ Resincronizar'; }
+}
+function openExport() {
+  $('#exClients').innerHTML = (state.masterFacets?.clients || []).map(c => `<option value="${esc(c.value)}">`).join('');
+  const active = Object.entries(MF).filter(([k, v]) => v && !(k === 'excluded' && v === 'hide')).length;
+  $('#exSummary').innerHTML = `<b>${masterTotal}</b> ${masterTotal === 1 ? 'registro cumple' : 'registros cumplen'} los filtros actuales${active ? ` (${active} ${active === 1 ? 'filtro activo' : 'filtros activos'})` : ' (sin filtros: toda la base)'}. Ajusta los filtros en la pestaña Registros antes de exportar.`;
+  $('#exportModal').classList.add('open');
+}
+function exportFilters() { const f = {...MF}; delete f.excluded; return f; }
+function masterDownload() {
+  const p = masterParams({fmt: $('#exFmt').value, sort: $('#exSort').value, limit: +$('#exLimit').value || 0, include_personal: $('#exPersonal').checked});
+  p.delete('excluded'); location.href = '/api/master/export?' + p; closeModals();
+}
+async function masterDeliver() {
+  const client = $('#exClient').value.trim();
+  if (!client) return toast('Escribe el nombre del cliente');
+  if ($('#exPersonal').checked && !confirm('Vas a entregar datos personales. ¿Confirmas que tienes autorización para comercializarlos?')) return;
+  try {
+    const d = await api('/api/master/deliveries', {method: 'POST', body: {client, price: $('#exPrice').value, notes: $('#exNotes').value,
+      include_personal: $('#exPersonal').checked, skip_delivered: $('#exSkip').checked, limit: +$('#exLimit').value || 0, sort: $('#exSort').value, filters: exportFilters()}});
+    closeModals(); toast(`Entrega #${d.id} registrada · ${d.record_count} registros`);
+    location.href = `/api/master/deliveries/${d.id}/download?fmt=${$('#exFmt').value}`;
+    showMaster('deliveries');
+  } catch (e) { toast(e.message); }
+}
+async function renderDeliveries() {
+  const ds = await api('/api/master/deliveries');
+  $('#masterBody').innerHTML = `<div class="card"><div class="card-title"><div><h2>Entregas a clientes</h2><p>Qué registros se entregaron a quién. Al volver a descargar se usan los datos actuales y se omiten los excluidos después.</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Entrega</th><th>Cliente</th><th>Registros</th><th>Precio</th><th>Datos personales</th><th>Acciones</th></tr></thead><tbody>
+    ${ds.length ? ds.map(d => `<tr><td><b>#${d.id}</b><div class="muted">${esc(utcLabel(d.created_at))} · por ${esc(d.created_by)}</div></td><td><b>${esc(d.client)}</b>${d.notes ? `<div class="muted">${esc(d.notes)}</div>` : ''}</td>
+      <td>${d.record_count}</td><td>${esc(d.price || '—')}</td><td>${d.include_personal ? '<span class="lead-tag tag-missing">Sí</span>' : 'No'}</td>
+      <td><div style="display:flex;gap:6px;flex-wrap:wrap"><a class="btn sm" href="/api/master/deliveries/${d.id}/download?fmt=xlsx">Excel</a><a class="btn sm" href="/api/master/deliveries/${d.id}/download?fmt=csv">CSV</a>
+        <button class="btn sm" onclick="Object.assign(MF, MF0, {delivery_id:${d.id}});masterPage=1;showMaster('records')">Ver registros</button><button class="btn sm danger" onclick="deleteDelivery(${d.id})">Anular</button></div></td></tr>`).join('')
+      : '<tr><td colspan="6" class="empty">Aún no hay entregas. Usa "Exportar / entregar" para registrar la primera.</td></tr>'}</tbody></table></div></div>`;
+}
+async function deleteDelivery(id) {
+  if (!confirm(`¿Anular la entrega #${id}? Sus registros volverán a contar como no entregados a ese cliente.`)) return;
+  try { await api(`/api/master/deliveries/${id}`, {method: 'DELETE'}); toast('Entrega anulada'); showMaster('deliveries'); } catch (e) { toast(e.message); }
+}
+async function renderExclusions() {
+  const xs = await api('/api/master/exclusions');
+  $('#masterBody').innerHTML = `<div class="card"><div class="card-title"><div><h2>Lista de exclusión</h2><p>Negocios o personas que pidieron no figurar. Coinciden por dominio, teléfono, correo o nombre, también en campañas futuras.</p></div></div>
+    <div class="filters"><select id="xKind" aria-label="Tipo"><option value="domain">Dominio web</option><option value="phone">Teléfono</option><option value="email">Correo</option><option value="name">Nombre del negocio</option></select>
+      <input id="xValue" type="search" placeholder="cafecentral.com · +57 300 123 4567 · nombre@dominio.com" aria-label="Valor"><input id="xReason" type="text" style="width:14rem;flex:none" placeholder="Motivo (opcional)" aria-label="Motivo">
+      <button class="btn primary" onclick="addExclusion()">Añadir exclusión</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Valor</th><th>Motivo</th><th>Fecha</th><th></th></tr></thead><tbody>
+    ${xs.length ? xs.map(x => `<tr><td>${esc(x.kind_label)}</td><td><b>${esc(x.kind === 'record' ? '#' + x.value : x.value)}</b>${x.label && x.label !== x.value ? `<div class="muted">${esc(x.label)}</div>` : ''}</td><td>${esc(x.reason || '—')}</td>
+      <td>${esc(utcLabel(x.created_at))}<div class="muted">por ${esc(x.created_by)}</div></td><td><button class="btn sm" onclick="removeExclusion(${x.id})">Quitar</button></td></tr>`).join('')
+      : '<tr><td colspan="5" class="empty">No hay exclusiones.</td></tr>'}</tbody></table></div></div>`;
+}
+async function addExclusion() {
+  try { const r = await api('/api/master/exclusions', {method: 'POST', body: {kind: $('#xKind').value, value: $('#xValue').value, reason: $('#xReason').value}});
+    toast(`Exclusión añadida · ${r.excluded} registros excluidos en total`); showMaster('exclusions'); } catch (e) { toast(e.message); }
+}
+async function removeExclusion(id) {
+  if (!confirm('¿Quitar esta exclusión? Los registros afectados volverán a la base con sus datos.')) return;
+  try { await api(`/api/master/exclusions/${id}`, {method: 'DELETE'}); toast('Exclusión quitada'); showMaster('exclusions'); } catch (e) { toast(e.message); }
+}
+
+// ---------- inicio: dashboard ----------
+const fmtN = n => (n ?? 0).toLocaleString('es-CO');
+const dayLabel = iso => new Date(iso + 'T12:00:00').toLocaleDateString('es-CO', {day: 'numeric', month: 'short'});
+// Marcas redondas del eje: paso 1, 2 o 5 × 10ⁿ y unas 4 divisiones.
+function niceTicks(lo, hi, n = 4) {
+  const raw = Math.max((hi - lo) / n, 1), p = 10 ** Math.floor(Math.log10(raw)), f = raw / p;
+  const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+  const start = Math.floor(lo / step) * step, end = Math.max(Math.ceil(hi / step) * step, start + step);
+  const out = []; for (let v = start; v <= end + 1e-9; v += step) out.push(v);
+  return out;
+}
+function chartTip(box, html, x, y) { let t = box.querySelector('.chart-tip'); if (!t) { t = document.createElement('div'); t.className = 'chart-tip'; box.appendChild(t); } t.replaceChildren(...html); t.style.left = x + 'px'; t.style.top = y + 'px'; t.style.display = 'block'; }
+const tipLines = (value, label) => { const b = document.createElement('b'); b.textContent = value; const sp = document.createElement('span'); sp.textContent = label; return [b, sp]; };
+function hideTip(box) { const t = box.querySelector('.chart-tip'); if (t) t.style.display = 'none'; }
+// Columnas: una serie, sin leyenda; el título dice qué se mide.
+function columnChart(box, data, unit) {
+  const W = Math.max(280, box.clientWidth), H = 220, m = {l: 34, r: 8, t: 18, b: 26};
+  const ticks = niceTicks(0, Math.max(...data.map(d => d.n), 1)), max = ticks[ticks.length - 1];
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const band = pw / data.length, bw = Math.min(24, Math.max(3, band * 0.68));
+  const y = v => m.t + ph - v / max * ph;
+  const top = data.reduce((bi, d, i) => d.n > data[bi].n ? i : bi, 0);
+  const col = (x, v) => { const h = Math.max(0, m.t + ph - y(v)); if (!h) return ''; const r = Math.min(4, h, bw / 2), yt = y(v);
+    return `M${x},${m.t + ph}V${yt + r}Q${x},${yt} ${x + r},${yt}H${x + bw - r}Q${x + bw},${yt} ${x + bw},${yt + r}V${m.t + ph}Z`; };
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${unit} por día, últimos ${data.length} días; máximo ${data[top].n} el ${dayLabel(data[top].day)}`)}">
+    <g class="grid">${ticks.map(v => `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}"/>`).join('')}</g>
+    <g class="axis">${ticks.map(v => `<text x="${m.l - 8}" y="${y(v) + 3}" text-anchor="end">${fmtK(Math.round(v))}</text>`).join('')}
+      ${data.map((d, i) => (i % 7 === (data.length - 1) % 7) ? `<text x="${m.l + band * i + band / 2}" y="${H - 6}" text-anchor="middle">${i === data.length - 1 ? 'hoy' : esc(dayLabel(d.day))}</text>` : '').join('')}</g>
+    ${data.map((d, i) => { const x = m.l + band * i + (band - bw) / 2;
+      return `<g><rect class="hit" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${ph}" tabindex="0" data-i="${i}" aria-label="${esc(`${dayLabel(d.day)}: ${d.n} ${unit.toLowerCase()}`)}"/><path class="col" d="${col(x, d.n)}"/></g>`; }).join('')}
+    ${data[top].n ? `<text x="${m.l + band * top + band / 2}" y="${y(data[top].n) - 6}" text-anchor="middle" style="font-size:11px;font-weight:600;fill:#0f172a">${fmtN(data[top].n)}</text>` : ''}
+  </svg>`;
+  box.querySelectorAll('.hit').forEach(r => {
+    const show = () => { const d = data[+r.dataset.i], bb = r.getBBox(), sc = box.clientWidth / W;
+      r.nextElementSibling.classList.add('hot');
+      chartTip(box, tipLines(fmtN(d.n), `${unit.toLowerCase()} · ${dayLabel(d.day)}`), (bb.x + bb.width / 2) * sc, Math.min(y(d.n), m.t + ph - 4) * sc); };
+    const hide = () => { r.nextElementSibling.classList.remove('hot'); hideTip(box); };
+    r.addEventListener('pointerenter', show); r.addEventListener('focus', show);
+    r.addEventListener('pointerleave', hide); r.addEventListener('blur', hide);
+  });
+}
+// Línea acumulada con relleno suave, cruceta y valor final.
+function lineChart(box, data, unit) {
+  const W = Math.max(280, box.clientWidth), H = 200, m = {l: 40, r: 44, t: 14, b: 26};
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const ticks = niceTicks(Math.min(...data.map(d => d.total)), Math.max(...data.map(d => d.total), 1), 3);
+  const min = ticks[0], max = ticks[ticks.length - 1];
+  const x = i => m.l + (data.length < 2 ? 0 : i / (data.length - 1) * pw), y = v => m.t + ph - (v - min) / (max - min || 1) * ph;
+  const pts = data.map((d, i) => `${x(i).toFixed(1)},${y(d.total).toFixed(1)}`).join(' ');
+  const last = data[data.length - 1];
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${unit}: de ${fmtN(data[0].total)} a ${fmtN(last.total)} en ${data.length} días`)}">
+    <g class="grid">${ticks.map(v => `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}"/>`).join('')}</g>
+    <g class="axis">${ticks.map(v => `<text x="${m.l - 8}" y="${y(v) + 3}" text-anchor="end">${fmtK(Math.round(v))}</text>`).join('')}
+      ${data.map((d, i) => (i % 7 === (data.length - 1) % 7) ? `<text x="${x(i)}" y="${H - 6}" text-anchor="middle">${i === data.length - 1 ? 'hoy' : esc(dayLabel(d.day))}</text>` : '').join('')}</g>
+    <polygon points="${m.l},${m.t + ph} ${pts} ${x(data.length - 1)},${m.t + ph}" style="fill:var(--color-brand-500);opacity:.1"/>
+    <polyline points="${pts}" fill="none" style="stroke:var(--color-brand-600)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <line class="xh" y1="${m.t}" y2="${m.t + ph}" stroke="#94a3b8" stroke-width="1" style="display:none"/>
+    <circle class="xd" r="4" style="fill:var(--color-brand-600);stroke:#fff;stroke-width:2;display:none"/>
+    <circle cx="${x(data.length - 1)}" cy="${y(last.total)}" r="4" style="fill:var(--color-brand-600);stroke:#fff;stroke-width:2"/>
+    <text x="${x(data.length - 1) + 8}" y="${y(last.total) + 4}" style="font-size:11px;font-weight:600;fill:#0f172a">${fmtK(last.total)}</text>
+    <rect class="hit" x="${m.l}" y="${m.t}" width="${pw}" height="${ph}" tabindex="0" aria-label="Recorrer los valores con las flechas"/>
+  </svg>`;
+  const svg = box.querySelector('svg'), hit = box.querySelector('.hit'), xh = box.querySelector('.xh'), xd = box.querySelector('.xd');
+  let cur = data.length - 1;
+  const show = i => { cur = Math.max(0, Math.min(data.length - 1, i)); const d = data[cur], sc = box.clientWidth / W;
+    xh.setAttribute('x1', x(cur)); xh.setAttribute('x2', x(cur)); xh.style.display = ''; xd.setAttribute('cx', x(cur)); xd.setAttribute('cy', y(d.total)); xd.style.display = '';
+    chartTip(box, tipLines(fmtN(d.total), `${dayLabel(d.day)} · +${fmtN(d.n)} ese día`), x(cur) * sc, y(d.total) * sc); };
+  const hide = () => { xh.style.display = xd.style.display = 'none'; hideTip(box); };
+  hit.addEventListener('pointermove', e => { const r = svg.getBoundingClientRect(); show(Math.round(((e.clientX - r.left) * W / r.width - m.l) / pw * (data.length - 1))); });
+  hit.addEventListener('pointerleave', hide); hit.addEventListener('blur', hide);
+  hit.addEventListener('focus', () => show(cur));
+  hit.addEventListener('keydown', e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { show(cur + (e.key === 'ArrowRight' ? 1 : -1)); e.preventDefault(); } });
+}
+const hbars = (rows, empty) => rows.some(r => r.n) ? `<div class="hbars">${rows.map(r => { const max = Math.max(...rows.map(x => x.n), 1);
+  return `<div class="hbar"><span class="lbl" title="${esc(r.label)}">${esc(r.label)}</span><span class="trk"><i style="width:${(r.n / max * 100).toFixed(1)}%"></i></span><span class="val">${fmtN(r.n)}</span></div>`; }).join('')}</div>`
+  : `<p class="muted">${empty}</p>`;
+const dataTable = (rows, cols) => `<details style="margin-top:12px"><summary class="text-xs">Ver datos en tabla</summary><table class="data-table"><thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${esc(c[1](r))}</td>`).join('')}</tr>`).join('')}</tbody></table></details>`;
+
+async function showHome() {
+  setView('Inicio'); clearTimeout(state.timer); state.cid = null; loadSide();
+  let d;
+  try { d = await api('/api/dashboard'); } catch (e) { return toast(e.message); }
+  state.dash = d;
+  const k = d.kpis, delta = k.leads_7d - k.leads_prev_7d;
+  const pctMail = k.leads_total ? Math.round(k.with_email / k.leads_total * 100) : 0;
+  const z = zoneOf(k.profiles_today, k.profiles_cap);
+  const today = new Date().toLocaleDateString('es-CO', {timeZone: appTz(), weekday: 'long', day: 'numeric', month: 'long'});
+  const upcoming = d.upcoming.length ? d.upcoming.map(u => { const uz = zoneOf(u.used_today, u.daily_profiles);
+    return `<div class="list-row"><div style="min-width:0"><b><a href="#" onclick="openCampaign(${u.id});return false">${esc(u.name)}</a></b>
+      <span class="muted">${u.running ? '● Buscando ahora' : '⏱ ' + esc(whenLabel(u.next_run_at))} · franja ${hhmm(u.window_start)}–${hhmm(u.window_end)}${d.admin && u.owner_name ? ' · ' + esc(u.owner_name) : ''}</span></div>
+      <div style="width:110px;flex:none"><div class="muted" style="text-align:right">${u.used_today}/${u.daily_profiles} hoy</div><div class="meter" style="--zone-color:${ZONES[uz][1]}"><i style="width:${Math.min(100, u.used_today / u.daily_profiles * 100)}%"></i></div></div></div>`; }).join('')
+    : `<p class="muted">No hay campañas programadas. Al crear una búsqueda, elige “Programada en una franja horaria”.</p>`;
+  const recent = d.recent.length ? d.recent.map(r => `<div class="list-row"><div style="min-width:0"><b><a href="#" onclick="openCampaign(${r.id});return false">${esc(r.name)}</a></b><span class="muted">${fmtN(r.leads)} leads${d.admin && r.owner_name ? ' · ' + esc(r.owner_name) : ''}</span></div><span class="pill">${esc(r.running ? 'En curso' : statusLabel(r.status))}</span></div>`).join('')
+    : `<p class="muted">Aún no hay campañas.</p>`;
+  const STATUS_NAMES = {nuevo: 'Nuevos', contactado: 'Contactados', interesado: 'Interesados', descartado: 'Descartados'};
+  $('#main').innerHTML = `${demoBanner()}
+    <div class="head"><div><div class="eyebrow">${esc(today)}</div><h1>Hola, ${esc(state.me.username)}</h1><div class="sub">${d.admin ? 'Resumen de todo el equipo y de la base de datos general.' : 'Resumen de tus campañas y leads.'}</div></div>
+      <div style="display:flex;gap:8px"><button class="btn" onclick="showHome()">Actualizar</button><button class="btn primary" onclick="openNew()">＋ Nueva búsqueda</button></div></div>
+    ${!k.campaigns ? `<div class="card empty" style="margin-bottom:24px"><h2>Encuentra tus primeros leads</h2><p>Crea una búsqueda con palabras clave (ej. “clínica dental”) y ubicaciones (ej. “Laureles, Medellín”). LeadHunter consulta Google Maps y la web de cada negocio para encontrar correos, WhatsApp y redes.</p><button class="btn primary" onclick="openNew()">＋ Nueva búsqueda</button></div>` : ''}
+    <div class="tiles">
+      <div class="tile"><div class="v">${fmtN(k.leads_total)}</div><div class="l">Leads en total</div></div>
+      <div class="tile"><div class="v">${fmtN(k.leads_today)}</div><div class="l">Nuevos hoy</div></div>
+      <div class="tile"><div class="v">${fmtN(k.leads_7d)}</div><div class="l">Últimos 7 días</div><div class="delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${delta === 0 ? 'Igual que' : (delta > 0 ? '+' : '') + fmtN(delta) + ' vs'} los 7 días anteriores</div></div>
+      <div class="tile"><div class="v">${pctMail}%</div><div class="l">Con correo · ${fmtN(k.with_email)}</div></div>
+      <div class="tile"><div class="v">${k.campaigns_active}</div><div class="l">Campañas programadas o en curso · de ${k.campaigns}</div></div>
+      <div class="tile"><div class="v">${fmtN(k.profiles_today)}</div><div class="l">Perfiles consultados hoy${d.admin ? ` · tope ${fmtN(k.profiles_cap)}` : ''}</div>
+        ${d.admin ? `<div class="meter" style="margin-top:10px;--zone-color:${ZONES[z][1]}" role="meter" aria-valuemin="0" aria-valuemax="${k.profiles_cap}" aria-valuenow="${k.profiles_today}" aria-label="Perfiles consultados hoy en el servidor"><i style="width:${Math.min(100, k.profiles_today / k.profiles_cap * 100)}%"></i></div><div style="margin-top:8px">${zoneBadge(z)}</div>` : ''}</div>
+    </div>
+    <div class="dash">
+      <div class="card span-8"><div class="card-title"><div><h2>Leads encontrados por día</h2><p>Últimos 30 días · ${fmtN(d.daily.reduce((n, x) => n + x.n, 0))} en total</p></div></div><div class="card-body"><div class="chart" id="chDaily"></div>${dataTable([...d.daily].reverse(), [['Día', r => dayLabel(r.day)], ['Leads', r => r.n]])}</div></div>
+      <div class="card span-4"><div class="card-title"><div><h2>Próximas tandas</h2><p>Campañas programadas, en hora de ${esc(appTz().replace('_', ' '))}</p></div></div><div class="card-body" style="padding-top:6px;padding-bottom:6px">${upcoming}</div></div>
+      ${d.admin ? `<div class="card span-8"><div class="card-title"><div><h2>Base de datos general</h2><p>Negocios acumulados en los últimos 30 días</p></div><button class="btn sm" onclick="showMaster()">Abrir la base</button></div>
+        <div class="card-body"><div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:12px"><div><div class="k">Negocios</div><div style="font-size:24px;font-weight:600">${fmtN(d.master.total)}</div></div><div><div class="k">Nuevos 7 días</div><div style="font-size:24px;font-weight:600">${fmtN(d.master.new_7d)}</div></div><div><div class="k">Con correo</div><div style="font-size:24px;font-weight:600">${fmtN(d.master.with_email)}</div></div><div><div class="k">Entregas</div><div style="font-size:24px;font-weight:600">${fmtN(d.master.deliveries)}</div></div></div>
+        <div class="chart" id="chMaster"></div>${dataTable([...d.master.growth].reverse(), [['Día', r => dayLabel(r.day)], ['Nuevos', r => r.n], ['Total', r => r.total]])}</div></div>
+      <div class="card span-4"><div class="card-title"><div><h2>Equipo</h2><p>Leads encontrados en los últimos 7 días</p></div><button class="btn sm" onclick="showUsers()">Usuarios</button></div><div class="card-body">${hbars(d.team.map(t => ({label: t.username + (t.active ? '' : ' (desactivado)'), n: t.leads_7d})), 'Sin actividad en los últimos 7 días.')}</div></div>` : ''}
+      <div class="card span-4"><div class="card-title"><div><h2>Embudo comercial</h2><p>Leads por estado</p></div></div><div class="card-body">${hbars(d.pipeline.map(p => ({label: STATUS_NAMES[p.status], n: p.n})), 'Aún no hay leads.')}<p class="muted" style="margin-top:12px">Cambia el estado desde la tabla de leads de cada campaña.</p></div></div>
+      <div class="card span-4"><div class="card-title"><div><h2>Categorías principales</h2><p>Tipos de negocio con más leads</p></div></div><div class="card-body">${hbars(d.categories.map(c => ({label: c.name, n: c.n})), 'Aún no hay categorías.')}</div></div>
+      <div class="card span-4"><div class="card-title"><div><h2>Campañas recientes</h2></div><button class="btn sm" onclick="showAll()">Todos los leads</button></div><div class="card-body" style="padding-top:6px;padding-bottom:6px">${recent}</div></div>
+    </div>`;
+  drawHomeCharts();
+}
+function drawHomeCharts() {
+  const d = state.dash; if (!d || !$('#chDaily')) return;
+  columnChart($('#chDaily'), d.daily, 'Leads');
+  if (d.admin && $('#chMaster')) lineChart($('#chMaster'), d.master.growth, 'Negocios en la base');
+}
+let homeResize;
+window.addEventListener('resize', () => { clearTimeout(homeResize); homeResize = setTimeout(drawHomeCharts, 150); });
+
 function closeModals() { document.querySelectorAll('.modal-bg').forEach(m => m.classList.remove('open')); syncOverlays(); }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModals(); closeDrawer(); } });
 document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', e => { if (e.target === m) closeModals(); }));
@@ -642,14 +1201,11 @@ async function init() {
   try { state.me = await api('/api/me'); } catch { return; }
   $('#whoName').textContent = state.me.username + (state.me.is_admin ? ' · admin' : '');
   $('#navUsers').hidden = !state.me.is_admin;
+  $('#navMaster').hidden = !state.me.is_admin;
   state.settings = await api('/api/settings');
-  const cs = await loadSide();
+  await loadSide();
   if (state.cid) return renderCampaign();
-  if (cs.length) return openCampaign(cs[0].id);
-  $('#main').innerHTML = `${demoBanner()}<div class="card empty"><h2>Encuentra tus primeros leads</h2>
-    <p>Crea una búsqueda con palabras clave (ej. “clínica dental”) y ubicaciones (ej. “Laureles, Medellín”).<br>
-    LeadHunter consulta Google Maps y visita la web de cada negocio para encontrar correos, WhatsApp y redes.</p>
-    <button class="btn primary" onclick="openNew()">＋ Nueva búsqueda</button></div>`;
+  return showHome();
 }
 // Fichas de empresa y contactos profesionales asociados.
 const RELATION_LABELS = {pending:'Candidato: vínculo por confirmar',published:'Vínculo publicado: vigencia por confirmar',confirmed:'Vínculo confirmado manualmente',rejected:'Descartado'};
@@ -761,7 +1317,9 @@ function setView(label) {
   $('#navCompanies').classList.toggle('active',label==='Empresas');
   $('#navLeads').classList.toggle('active',label==='Todos los leads');
   $('#navUsers').classList.toggle('active',label==='Usuarios');
-  [$('#navCompanies'),$('#navLeads'),$('#navUsers')].forEach(b=>b.classList.contains('active')?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current'));
+  $('#navMaster').classList.toggle('active',label==='Base de datos');
+  $('#navHome').classList.toggle('active',label==='Inicio');
+  [$('#navCompanies'),$('#navLeads'),$('#navUsers'),$('#navMaster'),$('#navHome')].forEach(b=>b.classList.contains('active')?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current'));
 }
 function updateFilterCount() {
   const n=[F.sales_profile,F.opportunity,F.tag,F.min_priority].filter(Boolean).length;
@@ -809,7 +1367,7 @@ document.addEventListener('keydown',e=>{
   else if(!e.shiftKey&&(document.activeElement===nodes.at(-1)||!activeOverlay.contains(document.activeElement))) {e.preventDefault();nodes[0].focus();}
 });
 const uiObserver=new MutationObserver(syncOverlays);
-['newModal','setModal','pwModal','schModal','userModal','loginBg','drawer'].forEach(id=>uiObserver.observe($('#'+id),{attributes:true,attributeFilter:['class']}));
+['newModal','setModal','pwModal','schModal','userModal','exportModal','loginBg','drawer'].forEach(id=>uiObserver.observe($('#'+id),{attributes:true,attributeFilter:['class']}));
 uiObserver.observe($('#drawer'),{childList:true});
 syncOverlays();
 syncSidebar();

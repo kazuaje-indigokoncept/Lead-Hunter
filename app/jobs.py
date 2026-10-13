@@ -4,12 +4,14 @@ import json
 import random
 import time
 import traceback
+import math
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 
-from . import db, intelligence, companies
+from . import db, intelligence, companies, master
 from .enrich import instagram, instagram_public, linkedin, website, people
 from .sources import maps_web, places, rues
 
@@ -17,28 +19,115 @@ RUNNING: dict[int, asyncio.Task] = {}
 STOP_REQUESTED: set[int] = set()
 BATCH_RUNNING: set[int] = set()     # campañas ejecutando una tanda programada
 
-# Límites de la programación por tandas.
-MIN_INTERVAL, MAX_INTERVAL = 5, 7 * 24 * 60        # minutos
-MAX_COMBOS_PER_BATCH = 50
+# Programación por franja horaria: las tandas se lanzan a horas aleatorias dentro de una
+# ventana diaria y se detienen al llegar al cupo de perfiles del día.
+WINDOW_STEP = 30              # minutos entre posiciones de la barra horaria
+MIN_WINDOW = 60               # la franja dura al menos una hora
+DEFAULT_WINDOW = (8 * 60, 18 * 60)
+DEFAULT_DAILY = 100
+PROFILE_STEP = 10
+DEFAULT_GLOBAL_CAP = 300      # perfiles por día en todo el servidor (Ajustes)
+MAX_GLOBAL_CAP = 5000
 MAX_BATCH_ERRORS = 3          # errores seguidos antes de dejar la campaña en "error"
+ERROR_WAIT = 60 * 60          # tras un error se espera al menos una hora
 SCHEDULER_TICK = 30           # segundos entre revisiones del programador
+DEFAULT_TZ = "America/Bogota"
+
+
+def app_tz():
+    try:
+        return ZoneInfo(db.get_setting("timezone", DEFAULT_TZ) or DEFAULT_TZ)
+    except Exception:  # noqa: BLE001 - zona inválida: se usa la predeterminada
+        return ZoneInfo(DEFAULT_TZ)
+
+
+def local_now(ts=None):
+    return datetime.fromtimestamp(ts if ts is not None else time.time(), app_tz())
+
+
+def global_cap() -> int:
+    try:
+        return max(PROFILE_STEP, min(int(db.get_setting("max_profiles_day", str(DEFAULT_GLOBAL_CAP))), MAX_GLOBAL_CAP))
+    except ValueError:
+        return DEFAULT_GLOBAL_CAP
 
 
 def schedule_of(camp) -> dict:
     """Programación de la campaña con valores por defecto. enabled=False → todo de una vez."""
     sch = (camp.get("options") or {}).get("schedule") or {}
     return {"enabled": bool(sch.get("enabled")),
-            "interval_minutes": int(sch.get("interval_minutes", 60)),
-            "combos_per_batch": int(sch.get("combos_per_batch", 1))}
+            "window_start": int(sch.get("window_start", DEFAULT_WINDOW[0])),
+            "window_end": int(sch.get("window_end", DEFAULT_WINDOW[1])),
+            "daily_profiles": int(sch.get("daily_profiles", DEFAULT_DAILY))}
 
 
 def combos_of(camp) -> list[tuple[str, str]]:
     return [(k, l) for k in camp["keywords"] for l in camp["locations"]]
 
 
-def next_delay(minutes: int) -> float:
-    """Intervalo en segundos con ±15 % de variación para no repetir un patrón fijo."""
-    return minutes * 60 * random.uniform(0.85, 1.15)
+def per_search(camp) -> int:
+    """Perfiles que puede aportar una búsqueda completa, sin superar el cupo diario."""
+    opts, srcs = camp.get("options") or {}, camp.get("sources") or []
+    if "google_maps" in srcs:
+        size = int(opts.get("maps_max_results", 40)) if opts.get("maps_mode", "api") == "web" else int(opts.get("max_pages", 3)) * 20
+    elif "rues" in srcs:
+        size = int(opts.get("rues_limit", 100))
+    else:
+        size = 40
+    return max(1, min(size, schedule_of(camp)["daily_profiles"]))
+
+
+def used_today(camp, day=None) -> int:
+    day = day or local_now().date().isoformat()
+    return (camp.get("daily_used") or 0) if camp.get("daily_date") == day else 0
+
+
+def server_used_today(day=None) -> int:
+    day = day or local_now().date().isoformat()
+    return db.one("SELECT COALESCE(SUM(daily_used), 0) n FROM campaigns WHERE daily_date = ?", (day,))["n"]
+
+
+def quota_left(camp) -> int:
+    """Perfiles que la campaña aún puede consultar hoy (cupo propio y tope del servidor)."""
+    day = local_now().date().isoformat()
+    own = schedule_of(camp)["daily_profiles"] - used_today(camp, day)
+    return max(0, min(own, global_cap() - server_used_today(day)))
+
+
+def window_bounds(day, sch, tz):
+    base = datetime(day.year, day.month, day.day, tzinfo=tz)
+    return base + timedelta(minutes=sch["window_start"]), base + timedelta(minutes=sch["window_end"])
+
+
+def in_window(camp, ts=None) -> bool:
+    now = local_now(ts)
+    start, end = window_bounds(now.date(), schedule_of(camp), now.tzinfo)
+    return start <= now < end
+
+
+def plan_next(camp, ts=None) -> float:
+    """Hora aleatoria de la siguiente tanda, dentro de la franja y repartiendo el cupo del día.
+
+    Las tandas que faltan hoy se reparten en lo que queda de franja: la siguiente cae en un
+    punto al azar del primer tramo, así cada día las horas son distintas.
+    """
+    now = local_now(ts)
+    tz, sch = now.tzinfo, schedule_of(camp)
+    per = per_search(camp)
+    left_combos = max(1, len(combos_of(camp)) - (camp.get("batch_cursor") or 0))
+    day = now.date()
+    start, end = window_bounds(day, sch, tz)
+    remaining = quota_left(camp)
+    if now >= end - timedelta(minutes=5) or remaining < 1:
+        day += timedelta(days=1)
+        start, end = window_bounds(day, sch, tz)
+        remaining, frm = sch["daily_profiles"], start
+    else:
+        frm = max(now, start)
+    batches = max(1, min(math.ceil(remaining / per), left_combos))
+    slot = (end - frm).total_seconds() / batches
+    when = frm + timedelta(seconds=slot * random.uniform(0.1, 0.9))
+    return max(when.timestamp(), (now + timedelta(minutes=1)).timestamp())
 
 
 def score(lead: dict) -> int:
@@ -90,6 +179,8 @@ def apply_enrichment(lead, data, *, demo=False):
     cid = companies.attach(updated)
     if not demo:
         people.store(cid, data.get("people_candidates", []))
+    final = db.one("SELECT * FROM leads WHERE id = ?", (lead["id"],))
+    master.safe_sync(final)
     return db.one("SELECT * FROM leads WHERE id = ?", (lead["id"],))
 
 
@@ -117,7 +208,7 @@ async def enrich_instagram(client, lead, *, mode="web", demo=False, token="", ig
 
 
 class Runner:
-    def __init__(self, cid: int, batch: tuple[int, int] | None = None):
+    def __init__(self, cid: int, batch: tuple[int, int] | None = None, profile_limit: int | None = None):
         self.cid = cid
         self.camp = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
         self.opts = self.camp["options"] or {}
@@ -126,6 +217,7 @@ class Runner:
         self.batch = batch
         self.combos = self.all_combos[batch[0]:batch[1]] if batch else self.all_combos
         self.touched: set[int] = set()   # leads guardados en esta ejecución
+        self.profile_limit = profile_limit  # tope de perfiles de esta tanda (cupo diario)
         self.demo = db.get_setting("demo_mode", "1") == "1"
         self.gkey = db.get_setting("google_api_key")
         self.calls = self.camp.get("api_calls", 0)
@@ -139,7 +231,7 @@ class Runner:
 
     # ---------- utilidades ----------
     def log(self, msg):
-        line = f"{datetime.now():%H:%M:%S} {msg}"
+        line = f"{local_now():%H:%M:%S} {msg}"
         self.log_lines.append(line)
         db.update("campaigns", self.cid, {"log": self.log_lines[-200:]})
 
@@ -161,7 +253,13 @@ class Runner:
     def count_call(self):
         self.calls += 1
 
+    def room(self) -> int | None:
+        """Perfiles que aún caben en esta tanda (None = sin tope)."""
+        return None if self.profile_limit is None else max(0, self.profile_limit - len(self.touched))
+
     def save(self, lead: dict, city: str):
+        if self.room() == 0:
+            return
         lead = {**lead, "campaign_id": self.cid}
         lead.setdefault("city", city)
         lead["score"] = score(lead)
@@ -182,6 +280,7 @@ class Runner:
         saved = db.one("SELECT * FROM leads WHERE campaign_id=? AND dedupe_key=?", (self.cid, lead["dedupe_key"]))
         self.touched.add(saved["id"])
         companies.attach(saved)
+        master.safe_sync(db.one("SELECT * FROM leads WHERE id = ?", (saved["id"],)))
 
     # ---------- fases ----------
     async def run(self):
@@ -190,8 +289,9 @@ class Runner:
                   if s in srcs or (s == "website" and any(net in srcs for net in ("linkedin", "instagram")))]
         if self.batch:
             first, last = self.batch
-            self.log(f"Tanda: búsquedas {first + 1}–{last} de {len(self.all_combos)} · "
-                     + ", ".join(f"'{k} en {l}'" for k, l in self.combos))
+            self.log(f"Tanda: búsqueda {first + 1} de {len(self.all_combos)} · "
+                     + ", ".join(f"'{k} en {l}'" for k, l in self.combos)
+                     + (f" · hasta {self.profile_limit} perfiles" if self.profile_limit is not None else ""))
         self.log(f"Inicio. Modo {'DEMO' if self.demo else 'REAL'}. Fuentes: {', '.join(phases)}")
         if not self.demo and "google_maps" in srcs and self.maps_mode == "api" and not self.gkey:
             raise RuntimeError("Falta la API key de Google (Ajustes).")
@@ -235,6 +335,8 @@ class Runner:
                     continue
             if self.opts.get("only_operational", True):
                 res = [r for r in res if r.get("business_status") in (None, "OPERATIONAL")]
+            if self.room() is not None:
+                res = res[:self.room()]
             for r in res:
                 self.save(r, l)
             self.log(f"Google Maps · '{q}': {len(res)} resultados")
@@ -243,11 +345,15 @@ class Runner:
     async def phase_maps_web(self, kws, locs, base, span):
         combos = self.combos
         limit = int(self.opts.get("maps_max_results", 40))
+        if self.room() is not None:
+            limit = min(limit, self.room())   # no visitar más fichas que el cupo de la tanda
         self.log(f"Google Maps sin API · hasta {limit} fichas por consulta. No consume llamadas a Places.")
         async with maps_web.MapsBrowser(log=self.log, check_stop=self.check_stop) as browser:
             for j, (k, l) in enumerate(combos):
                 self.check_stop()
                 count = 0
+                if limit < 1:
+                    break
                 async for lead in browser.search(
                     f"{k} en {l}", max_results=limit,
                     min_rating=self.opts.get("min_rating") or None,
@@ -275,7 +381,7 @@ class Runner:
             try:
                 res = demo_rues(k, l) if self.demo else await rues.search(
                     client, keyword=k if not ciiu else "", camara=l, ciiu=ciiu, since=since,
-                    limit=int(self.opts.get("rues_limit", 100)),
+                    limit=min(int(self.opts.get("rues_limit", 100)), self.room() if self.room() is not None else 10**6),
                     app_token=db.get_setting("socrata_token"))
             except httpx.HTTPError as e:
                 self.log(f"RUES error ({l}): {e}")
@@ -394,66 +500,122 @@ async def run_campaign(cid: int):
         STOP_REQUESTED.discard(cid)
 
 
-async def run_batch(cid: int):
-    """Ejecuta la siguiente tanda de búsquedas y programa la siguiente."""
+def _record_run(camp, entry):
+    runs = (camp.get("runs") or []) + [{"at": time.time(), **entry}]
+    return runs[-60:]
+
+
+def _when(ts):
+    t = local_now(ts)
+    return f"{t:%H:%M}" if t.date() == local_now().date() else f"{t:%d/%m %H:%M}"
+
+
+async def run_batch(cid: int, manual: bool = False):
+    """Ejecuta la siguiente búsqueda dentro del cupo del día y programa la siguiente tanda."""
     camp = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
-    sch, total = schedule_of(camp), len(combos_of(camp))
-    first = min(camp.get("batch_cursor") or 0, total)
-    last = min(first + sch["combos_per_batch"], total)
-    r = Runner(cid, (first, last))
+    total = len(combos_of(camp))
+    cursor = min(camp.get("batch_cursor") or 0, total)
+    day = local_now().date().isoformat()
+    used = used_today(camp, day)
+    room = quota_left(camp)
+
+    def reschedule(msg):
+        fresh = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
+        nxt = plan_next(fresh)
+        lines = (fresh.get("log") or []) + [f"{local_now():%H:%M:%S} {msg} Próxima tanda: {_when(nxt)}."]
+        db.update("campaigns", cid, {"status": "programada", "next_run_at": nxt, "log": lines[-200:]})
+
     try:
-        await r.run()
-    except asyncio.CancelledError:
-        r.log("Programación pausada por el usuario. Pulsa Reanudar para continuar.")
-        db.update("campaigns", cid, {"status": "pausada", "next_run_at": None})
-        return
-    except Exception as e:  # noqa: BLE001
-        traceback.print_exc()
-        errors = (camp.get("batch_errors") or 0) + 1
-        if errors >= MAX_BATCH_ERRORS:
-            r.log(f"ERROR: {e}. {errors} tandas seguidas con error: programación detenida.")
-            db.update("campaigns", cid, {"status": "error", "next_run_at": None, "batch_errors": errors})
+        if room < 1:
+            reschedule("Cupo de perfiles de hoy alcanzado.")
+            return
+        if not manual and not in_window(camp):
+            reschedule("Fuera de la franja horaria configurada.")
+            return
+        per = per_search(camp)
+        limit = min(per, room)
+        r = Runner(cid, (cursor, cursor + 1), profile_limit=limit)
+        try:
+            await r.run()
+        except asyncio.CancelledError:
+            r.log("Programación pausada por el usuario. Pulsa Reanudar para continuar.")
+            db.update("campaigns", cid, {"status": "pausada", "next_run_at": None,
+                                         "daily_date": day, "daily_used": used + len(r.touched)})
+            return
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            errors = (camp.get("batch_errors") or 0) + 1
+            fresh = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
+            upd = {"batch_errors": errors, "daily_date": day, "daily_used": used + len(r.touched),
+                   "runs": _record_run(fresh, {"index": cursor, "profiles": len(r.touched), "status": "error", "manual": manual})}
+            if errors >= MAX_BATCH_ERRORS:
+                r.log(f"ERROR: {e}. {errors} tandas seguidas con error: programación detenida.")
+                db.update("campaigns", cid, {**upd, "status": "error", "next_run_at": None})
+            else:
+                # Ante un bloqueo o fallo se espera al menos una hora antes de repetir la búsqueda.
+                nxt = max(plan_next({**fresh, **upd}), time.time() + ERROR_WAIT)
+                r.log(f"ERROR: {e}. Se repetirá esta búsqueda hacia las {_when(nxt)}.")
+                db.update("campaigns", cid, {**upd, "status": "programada", "next_run_at": nxt})
+            return
+        got = len(r.touched)
+        # Si el cupo cortó la búsqueda, mañana se repite completa (los repetidos se unifican).
+        capped = limit < per and got >= limit
+        new_cursor = cursor if capped else cursor + 1
+        fresh = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
+        upd = {"batch_cursor": new_cursor, "batch_errors": 0, "daily_date": day, "daily_used": used + got,
+               "runs": _record_run(fresh, {"index": cursor, "profiles": got, "status": "parcial" if capped else "ok", "manual": manual})}
+        if new_cursor >= total:
+            r.log(f"Campaña completada: {total} búsquedas procesadas en tandas.")
+            db.update("campaigns", cid, {**upd, "status": "terminada", "progress": 1, "next_run_at": None})
         else:
-            # Ante un bloqueo o fallo se espera el doble antes de repetir la misma tanda.
-            wait = next_delay(sch["interval_minutes"] * 2)
-            r.log(f"ERROR: {e}. Se repetirá esta tanda en {round(wait / 60)} min.")
-            db.update("campaigns", cid, {"status": "programada", "next_run_at": time.time() + wait,
-                                         "batch_errors": errors})
-        return
+            nxt = plan_next({**fresh, **upd})
+            r.log(f"{got} perfiles en esta tanda · hoy {used + got} de {schedule_of(camp)['daily_profiles']}. "
+                  + ("Cupo alcanzado: esta búsqueda se completará en el próximo día. " if capped else "")
+                  + f"Próxima tanda: {_when(nxt)} ({new_cursor} de {total} búsquedas hechas).")
+            db.update("campaigns", cid, {**upd, "status": "programada", "next_run_at": nxt})
     finally:
         RUNNING.pop(cid, None)
         BATCH_RUNNING.discard(cid)
         STOP_REQUESTED.discard(cid)
-    if last >= total:
-        r.log(f"Campaña completada: {total} búsquedas procesadas en tandas.")
-        db.update("campaigns", cid, {"status": "terminada", "progress": 1, "batch_cursor": total,
-                                     "next_run_at": None, "batch_errors": 0})
-    else:
-        wait = next_delay(sch["interval_minutes"])
-        when = datetime.fromtimestamp(time.time() + wait)
-        r.log(f"Próxima tanda hacia las {when:%H:%M} ({last} de {total} búsquedas hechas).")
-        db.update("campaigns", cid, {"status": "programada", "batch_cursor": last, "batch_errors": 0,
-                                     "next_run_at": time.time() + wait})
 
 
-def _launch_batch(cid: int):
+def _launch_batch(cid: int, manual: bool = False):
     BATCH_RUNNING.add(cid)
-    RUNNING[cid] = asyncio.create_task(run_batch(cid))
+    RUNNING[cid] = asyncio.create_task(run_batch(cid, manual))
+
+
+def _restart_if_done(camp):
+    if (camp.get("batch_cursor") or 0) >= len(combos_of(camp)):
+        # Campaña ya completada: se vuelve a recorrer desde la primera búsqueda.
+        db.update("campaigns", camp["id"], {"batch_cursor": 0, "progress": 0})
 
 
 def start(cid: int):
-    """Ejecuta la campaña completa o, si está programada, su siguiente tanda ahora."""
+    """Ejecuta la campaña completa o, si está programada, su siguiente tanda ahora mismo."""
     if cid in RUNNING:
         return False
     camp = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
     if camp and schedule_of(camp)["enabled"]:
-        if (camp.get("batch_cursor") or 0) >= len(combos_of(camp)):
-            # Campaña ya completada: se vuelve a recorrer desde la primera búsqueda.
-            db.update("campaigns", cid, {"batch_cursor": 0, "progress": 0})
+        _restart_if_done(camp)
         db.update("campaigns", cid, {"status": "en curso", "batch_errors": 0})
-        _launch_batch(cid)
+        _launch_batch(cid, manual=True)
         return True
     RUNNING[cid] = asyncio.create_task(run_campaign(cid))
+    return True
+
+
+def schedule(cid: int):
+    """Activa o reanuda la programación: la siguiente tanda cae al azar dentro de la franja."""
+    if cid in RUNNING:
+        return False
+    camp = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
+    if not camp or not schedule_of(camp)["enabled"]:
+        return False
+    _restart_if_done(camp)
+    camp = db.one("SELECT * FROM campaigns WHERE id = ?", (cid,))
+    nxt = plan_next(camp)
+    lines = (camp.get("log") or []) + [f"{local_now():%H:%M:%S} Programación activa. Primera tanda: {_when(nxt)}."]
+    db.update("campaigns", cid, {"status": "programada", "next_run_at": nxt, "batch_errors": 0, "log": lines[-200:]})
     return True
 
 
@@ -499,11 +661,11 @@ async def scheduler_loop():
 
 def recover():
     """Tras un reinicio, ninguna campaña sigue realmente en curso."""
-    for c in db.query("SELECT id, options, log FROM campaigns WHERE status = 'en curso'"):
-        log = (c["log"] or []) + [f"{datetime.now():%H:%M:%S} Interrumpida por un reinicio del servidor."]
+    for c in db.query("SELECT * FROM campaigns WHERE status = 'en curso'"):
+        log = (c["log"] or []) + [f"{local_now():%H:%M:%S} Interrumpida por un reinicio del servidor."]
         if schedule_of(c)["enabled"]:
-            # Se repite la tanda interrumpida en cuanto el programador arranque.
-            db.update("campaigns", c["id"], {"status": "programada", "next_run_at": time.time(), "log": log[-200:]})
+            # La búsqueda interrumpida se repite en la franja horaria.
+            db.update("campaigns", c["id"], {"status": "programada", "next_run_at": plan_next(c), "log": log[-200:]})
         else:
             db.update("campaigns", c["id"], {"status": "detenida", "log": log[-200:]})
 

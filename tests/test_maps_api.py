@@ -41,7 +41,7 @@ class CampaignApiTests(unittest.TestCase):
         self.client.cookies.clear()
         page = self.client.get('/')
         self.assertEqual(page.status_code, 200)
-        self.assertIn('/static/app.css?v=7', page.text)
+        self.assertIn('/static/app.css?v=8', page.text)
         css = self.client.get('/static/app.css')
         self.assertEqual(css.status_code, 200)
         self.assertIn('text/css', css.headers['content-type'])
