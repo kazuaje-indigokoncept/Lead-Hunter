@@ -183,6 +183,10 @@ Los administradores gestionan el equipo en la sección **Usuarios** del menú la
 - Las claves de API (Ajustes) son compartidas y solo las cambia un administrador.
 - Los datos creados antes de separar por usuario pasan automáticamente al primer administrador.
 
+## Google Maps sin API en servidores (Railway, Docker)
+
+Chromium se lanza con `--disable-dev-shm-usage` porque en Docker la memoria compartida (`/dev/shm`) suele ser de 64 MB y Google Maps colgaba el navegador ("Page crashed"). Además, no descarga imágenes, vídeos ni fuentes de Maps para ahorrar memoria; si alguna vez afectara la lectura, define `MAPS_BLOCK_MEDIA=0` en las variables del servidor. Si una pestaña se cuelga, la app la reabre y reintenta; una ficha que falla dos veces se omite y la campaña sigue. Si los cuelgues continúan, revisa el consumo de memoria del servicio (en Railway, pestaña Metrics) y amplíala.
+
 ## Configurar las APIs (Ajustes)
 
 ### Google Maps sin API
