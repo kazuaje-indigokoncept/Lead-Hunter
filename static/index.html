@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LeadHunter</title>
-<link rel="stylesheet" href="/static/app.css?v=8">
+<link rel="stylesheet" href="/static/app.css?v=9">
 </head>
 <body>
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-60 focus:rounded-lg focus:bg-white focus:p-3">Ir al contenido</a>
@@ -132,7 +132,7 @@
       <div class="field"><label>Formato</label><select id="exFmt"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV</option></select></div>
       <div class="field"><label>Orden</label><select id="exSort"><option value="quality">Más completos primero</option><option value="recent">Más recientes primero</option></select></div>
     </div>
-    <div class="field"><label>Cantidad máxima de registros</label><input type="number" id="exLimit" min="0" value="0"><div class="hint">0 = todos los que cumplen los filtros. Los excluidos nunca se exportan.</div></div>
+    <div class="field"><label>Cantidad máxima de registros</label><input type="number" id="exLimit" min="0" value="0"><div class="hint">0 = todos los que cumplen los filtros. Los excluidos nunca se exportan, y los correos que fallaron la verificación tampoco. Para vender solo lo más fiable, filtra por confianza en la pestaña Registros.</div></div>
     <div class="field"><label class="chip"><input type="checkbox" id="exPersonal">Incluir datos personales</label>
     <div class="hint">Añade correos con nombre de persona y personas de contacto (nombre, cargo, LinkedIn). Para venderlos normalmente necesitas la autorización de los titulares (Ley 1581 en Colombia, LOPDP en Ecuador). Sin marcar, solo se exportan datos del negocio.</div></div>
     <h3>Registrar como entrega a un cliente</h3>
@@ -288,6 +288,16 @@ document.addEventListener('keydown', e => {
 const ZONES = {good: ['Ritmo seguro', 'var(--good)'], warn: ['Cerca del máximo', 'var(--warn)'], crit: ['Al máximo diario', 'var(--crit)']};
 const zoneOf = (v, max) => v / Math.max(max, 1) >= 0.9 ? 'crit' : v / Math.max(max, 1) >= 0.6 ? 'warn' : 'good';
 const zoneBadge = z => `<span class="zone-badge ${z}" style="--zone-color:${ZONES[z][1]}">${ZONES[z][0]}</span>`;
+// Nivel de confianza (Alta/Media/Baja) y resultado de la verificación de cada correo o teléfono.
+const CONF = {alta: ['Confianza alta', 'good'], media: ['Confianza media', 'warn'], baja: ['Confianza baja', 'crit']};
+const confBadge = (level, score) => level ? `<span class="zone-badge ${CONF[level][1]}" style="--zone-color:${ZONES[CONF[level][1]][1]}" title="Puntaje ${score}/100">${CONF[level][0]}${score != null ? ` · ${score}` : ''}</span>` : '';
+const GOOD_CHECK = new Set(['valid_domain', 'valid']);
+function checkTag(v) {
+  if (!v) return '<span class="lead-tag tag-unknown" title="Todavía no se ha verificado">? sin verificar</span>';
+  const ok = GOOD_CHECK.has(v.status), unk = v.status === 'unknown';
+  return `<span class="lead-tag ${ok ? 'tag-present' : unk ? 'tag-unknown' : 'tag-bad'}" title="${esc(v.label + (v.suggestion ? ' · ¿quisiste decir ' + v.suggestion + '?' : '') + ' · ' + dateLabel(v.checked_at))}">${ok ? '✓' : unk ? '?' : '✗'} ${esc(v.label)}</span>`;
+}
+const confReasons = rs => (rs || []).map(x => `<div>${x.points > 0 ? '+' : ''}${x.points ? x.points + ' · ' : ''}${esc(x.reason)}</div>`).join('');
 
 // Línea de tiempo: un punto por búsqueda y una franja de 24 h con las tandas de hoy.
 function campaignTimeline(c) {
@@ -489,11 +499,12 @@ function openLead(id, tab) {
   const link = (u, t) => safeUrl(u) ? `<a href="${esc(safeUrl(u))}" target="_blank" rel="noopener">${esc(t || u)}</a>` : '—';
   const extra = Object.entries(l.extra || {}).filter(([,v]) => v).map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
   const evidenceCount = Object.values(l.provenance || {}).reduce((n, r) => n + r.length, 0);
+  const ver = l.verification || {}, mc = l.master_confidence;
   const counts = {oportunidades: l.opportunities.length, evidencia: evidenceCount, notas: l.notes ? '•' : ''};
   const panels = {
     contacto: `<dl class="kv" style="margin-top:0">
-      <dt>Teléfonos</dt><dd>${(l.phones && l.phones.length ? l.phones : [l.phone || '—']).map(esc).join('<br>')}</dd>
-      <dt>Correos</dt><dd>${l.emails.length ? l.emails.map(esc).join('<br>') : '—'}</dd>
+      <dt>Teléfonos</dt><dd>${(l.phones && l.phones.length ? l.phones : l.phone ? [l.phone] : []).map(p => `${esc(p)} ${checkTag(ver.phones?.[p])}`).join('<br>') || '—'}</dd>
+      <dt>Correos</dt><dd>${l.emails.length ? l.emails.map(e => `${esc(e)} ${checkTag(ver.emails?.[e.toLowerCase()])}`).join('<br>') : '—'}</dd>
       <dt>Dirección</dt><dd>${esc(l.address || '—')}</dd>
       <dt>Sitio web</dt><dd>${link(l.website)}</dd>
       <dt>Instagram</dt><dd>${link(l.instagram)}${l.ig_followers != null ? ` · ${l.ig_followers.toLocaleString('es-CO')} seguidores` : ''}</dd>
@@ -513,7 +524,12 @@ function openLead(id, tab) {
       <h3>Oportunidades detectadas</h3>${l.opportunities.length ? l.opportunities.map(o=>`<div class="evidence-item"><b>${esc(o.title)}</b><br>${esc(o.reason)}<br><span class="muted">Para ${o.profiles.map(p=>esc(PROFILES[p])).join(', ')}</span>${o.url?'<br>'+link(o.url,'Ver evidencia'):''}</div>`).join('') : '<p class="muted">No hay señales suficientes para detectar oportunidades.</p>'}
       <h3>Empresa</h3><p class="muted">Este registro pertenece a la empresa #${l.company_id} · ${esc(l.company_name)}.</p><button class="btn sm" onclick="companyProfile='${l.sales_profile}';openCompany(${l.company_id})">Ver responsables de la empresa</button>
       <details style="margin-top:14px"><summary>Cambiar asociación de empresa</summary><p class="muted">Consulta el ID en Empresas y responsables. Puedes corregir una agrupación o separar este registro.</p><div class="field"><label>ID de empresa</label><input id="leadCompanyId" type="number" min="1" value="${l.company_id}"></div><button class="btn sm" onclick="reassignCompany(${l.id})">Asociar a esta empresa</button> <button class="btn sm" onclick="reassignCompany(${l.id},true)">Separar en una nueva empresa</button></details>`,
-    evidencia: `<div class="insight-box" style="margin-top:0"><h3>Calidad y procedencia</h3><b>${esc(l.data_quality.label)}</b> · ${l.data_quality.evidence_coverage}% de los datos con fuente guardada<br>${esc(l.data_quality.email_status)}<p class="muted">${esc(l.data_quality.note)}</p></div>
+    evidencia: `${mc && !mc.excluded ? `<div class="insight-box" style="margin-top:0"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px">Confianza en la base general ${confBadge(mc.confidence_level, mc.confidence)}</h3>${confReasons(mc.confidence_reasons)}<div class="muted" style="margin-top:6px">Combina coincidencia entre fuentes, verificación de contactos, antigüedad del dato y estado del negocio.</div></div>` : ''}
+      <h3 style="margin-top:${mc ? '0' : '0'}">Verificación de contactos</h3>
+      <div class="evidence-item">${ver.checked_at ? `Última verificación: ${esc(dateLabel(ver.checked_at))}` : 'Correos y teléfonos sin verificar todavía.'}
+        <p class="muted">Gratis y sin enviar mensajes: comprueba el formato, que el dominio del correo reciba correo, correos temporales o mal escritos, y que el teléfono sea válido (móvil o fijo) para su país. No confirma que el buzón o la línea estén en uso.</p>
+        <button class="btn sm" onclick="verifyLead(${l.id}, this)">${ver.checked_at ? 'Volver a verificar' : 'Verificar ahora'}</button></div>
+      <div class="insight-box"><h3>Calidad y procedencia</h3><b>${esc(l.data_quality.label)}</b> · ${l.data_quality.evidence_coverage}% de los datos con fuente guardada<br>${esc(l.data_quality.email_status)}<p class="muted">${esc(l.data_quality.note)}</p></div>
       <h3>Revisiones</h3>
       <div class="evidence-item"><b>Web</b> · ${esc(REVIEW_STATES[l.web_audit.status] || 'Sin revisar')} · ${esc(dateLabel(l.web_audit.checked_at))}${l.web_audit.partial?'<br>Revisión parcial: algunas páginas no pudieron consultarse.':''}${(l.web_audit.pages||[]).map(u=>'<br>'+link(u)).join('')}${l.website?`<br><button class="btn sm" style="margin-top:6px" onclick="reviewLead(${l.id},'website',this)">Volver a buscar contactos y oportunidades</button>`:''}</div>
       <div class="evidence-item"><b>Instagram</b> · ${esc(REVIEW_STATES[(l.instagram_data||{}).status] || 'Sin revisar')} · ${esc(dateLabel((l.instagram_data||{}).checked_at))}${l.instagram_data.mode?'<br>Modo: '+(l.instagram_data.mode==='web'?'Público, sin API':'API de Meta'):''}${l.instagram_data.note?'<br>'+esc(l.instagram_data.note):''}${l.instagram_data.title?'<br>'+esc(l.instagram_data.title):''}${(l.instagram_data.external_links||[]).map(u=>'<br>'+link(u,'Enlace publicado')).join('')}${l.instagram?`<br><button class="btn sm" style="margin-top:6px" onclick="reviewLead(${l.id},'instagram',this)">Consultar perfil público</button>`:''}</div>
@@ -563,6 +579,16 @@ async function saveLead(id, tab) {
   if (request !== drawerRequest || !$('#drawer.open')) return;
   if (!state.leads.some(x => x.id === id)) state.leads.push(l);
   openLead(id, tab);
+}
+async function verifyLead(id, button) {
+  const request = drawerRequest;
+  button.disabled = true; button.textContent = 'Verificando…';
+  try {
+    const l = await api(`/api/leads/${id}/verify?sales_profile=${encodeURIComponent(F.sales_profile)}`, {method: 'POST'});
+    await loadLeads(); if (request !== drawerRequest || !$('#drawer.open')) return;
+    if (!state.leads.some(x => x.id === id)) state.leads.push(l); else Object.assign(state.leads.find(x => x.id === id), l);
+    openLead(id, 'evidencia'); toast('Verificación terminada');
+  } catch (e) { toast(e.message); button.disabled = false; button.textContent = 'Verificar ahora'; }
 }
 async function reviewLead(id, kind, button) {
   const request=drawerRequest;
@@ -866,10 +892,10 @@ async function resetUserPassword(id) {
 }
 
 // ---------- base de datos general (solo administradores) ----------
-const MF0 = {q:'', city:'', category:'', has_email:false, has_phone:false, has_wa:false, has_web:false, no_web:false, has_ig:false,
+const MF0 = {q:'', city:'', category:'', min_confidence:0, has_email:false, has_phone:false, has_wa:false, has_web:false, no_web:false, has_ig:false,
   updated_days:0, min_quality:0, excluded:'hide', not_delivered_to:'', never_delivered:false, delivery_id:0};
 const MF = {...MF0};
-let masterTab = 'records', masterPage = 1, masterSort = 'quality', masterRequest = 0, masterTimer, masterTotal = 0;
+let masterTab = 'records', masterPage = 1, masterSort = 'confidence', masterRequest = 0, masterTimer, masterTotal = 0;
 const utcLabel = v => v ? new Date(/[zZ]|[+-]\d\d:\d\d$/.test(v) ? v : v.replace(' ', 'T') + 'Z').toLocaleDateString('es-CO', {day:'numeric', month:'short', year:'numeric'}) : '—';
 function masterParams(extra = {}) {
   const p = new URLSearchParams();
@@ -884,9 +910,9 @@ async function showMaster(tab = 'records') {
   const tabBtn = (id, label) => `<button class="btn sm ${masterTab === id ? 'primary' : ''}" onclick="showMaster('${id}')">${label}</button>`;
   $('#main').innerHTML = `<div class="head"><div><div class="eyebrow">Activo del negocio</div><h1>Base de datos general</h1>
       <div class="sub">Un registro por negocio, alimentado por las campañas reales de todo el equipo. Los datos de demostración no entran.</div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" onclick="masterResync(this)">↻ Resincronizar</button><button class="btn primary" onclick="openExport()">⬇ Exportar / entregar</button></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="mVerifyBtn" onclick="masterVerify(this)">✓ Verificar contactos${s.unverified ? ` · ${s.unverified} pendientes` : ''}</button><button class="btn" onclick="masterResync(this)">↻ Resincronizar</button><button class="btn primary" onclick="openExport()">⬇ Exportar / entregar</button></div></div>
     <div class="tiles">${[[s.total, 'Negocios'], [s.email, 'Con correo'], [s.phone, 'Con teléfono'], [s.wa, 'Con WhatsApp'], [s.web, 'Con web'], [s.cities, 'Ciudades'],
-      [s.delivered_records, `Entregados · ${s.deliveries} ${s.deliveries === 1 ? 'entrega' : 'entregas'}`], [s.excluded, 'Excluidos']]
+      [s.delivered_records, `Entregados · ${s.deliveries} ${s.deliveries === 1 ? 'entrega' : 'entregas'}`], [s.conf_high, `Confianza alta · ${s.conf_mid} media`], [s.excluded, 'Excluidos']]
       .map(([v, l]) => `<div class="tile"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('')}</div>
     <div style="display:flex;gap:8px;margin:0 0 14px">${tabBtn('records', 'Registros')}${tabBtn('deliveries', 'Entregas')}${tabBtn('exclusions', 'Exclusiones')}</div>
     <div id="masterBody"></div>
@@ -911,13 +937,14 @@ function renderMasterRecords() {
       <input id="mCat" type="text" list="mCats" aria-label="Categoría" placeholder="Categoría" value="${esc(MF.category)}" style="width:12rem;flex:none"></div>
     <div class="filters">${chk('has_email', 'Con correo')}${chk('has_phone', 'Con teléfono')}${chk('has_wa', 'Con WhatsApp')}${chk('has_web', 'Con web')}${chk('no_web', 'Sin web')}${chk('has_ig', 'Con Instagram')}
       <select id="mDays" aria-label="Actualización"><option value="0">Cualquier fecha</option>${[30, 90, 180, 365].map(d => `<option value="${d}" ${+MF.updated_days === d ? 'selected' : ''}>Actualizados en ${d} días</option>`).join('')}</select>
+      <select id="mConf" aria-label="Confianza mínima"><option value="0">Cualquier confianza</option><option value="40" ${+MF.min_confidence === 40 ? 'selected' : ''}>Confianza media o alta</option><option value="70" ${+MF.min_confidence === 70 ? 'selected' : ''}>Solo confianza alta</option></select>
       <select id="mQuality" aria-label="Completitud mínima"><option value="0">Cualquier completitud</option>${[25, 50, 75].map(q => `<option value="${q}" ${+MF.min_quality === q ? 'selected' : ''}>Completitud ≥ ${q}</option>`).join('')}</select>
       <select id="mDelivery" aria-label="Entregas"><option value="">Entregados o no</option><option value="never" ${delivery === 'never' ? 'selected' : ''}>Nunca entregados</option>
         ${clients.map(c => `<option value="client:${esc(c.value)}" ${delivery === 'client:' + c.value ? 'selected' : ''}>No entregados a ${esc(c.value)}</option>`).join('')}
         ${MF.delivery_id ? `<option value="delivery:${MF.delivery_id}" selected>Solo la entrega #${MF.delivery_id}</option>` : ''}</select>
       <select id="mExcluded" aria-label="Excluidos"><option value="hide">Sin excluidos</option><option value="only" ${MF.excluded === 'only' ? 'selected' : ''}>Solo excluidos</option></select>
-      <select id="mSort" aria-label="Orden">${Object.entries({quality:'Más completos', recent:'Más recientes', name:'Nombre', rating:'Rating', reviews:'Reseñas', sources:'Más fuentes'}).map(([v, l]) => `<option value="${v}" ${masterSort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-    <div class="table-wrap"><table><thead><tr><th>Negocio</th><th>Contacto</th><th>Presencia</th><th>Origen</th><th>Completitud</th></tr></thead><tbody id="masterRows"></tbody></table></div>
+      <select id="mSort" aria-label="Orden">${Object.entries({confidence:'Más confiables', quality:'Más completos', recent:'Más recientes', name:'Nombre', rating:'Rating', reviews:'Reseñas', sources:'Más fuentes'}).map(([v, l]) => `<option value="${v}" ${masterSort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="table-wrap"><table><thead><tr><th>Negocio</th><th>Contacto</th><th>Presencia</th><th>Origen</th><th>Confianza</th></tr></thead><tbody id="masterRows"></tbody></table></div>
     <div class="pager" id="masterPager"></div></div>`;
   const later = fn => { clearTimeout(masterTimer); masterTimer = setTimeout(fn, 250); };
   $('#mQ').oninput = e => later(() => { MF.q = e.target.value.trim(); masterPage = 1; loadMaster(); });
@@ -925,6 +952,7 @@ function renderMasterRecords() {
   $('#mCat').oninput = e => later(() => { MF.category = e.target.value.trim(); masterPage = 1; loadMaster(); });
   $('#mDays').onchange = e => { MF.updated_days = +e.target.value; masterPage = 1; loadMaster(); };
   $('#mQuality').onchange = e => { MF.min_quality = +e.target.value; masterPage = 1; loadMaster(); };
+  $('#mConf').onchange = e => { MF.min_confidence = +e.target.value; masterPage = 1; loadMaster(); };
   $('#mExcluded').onchange = e => { MF.excluded = e.target.value; masterPage = 1; loadMaster(); };
   $('#mSort').onchange = e => { masterSort = e.target.value; masterPage = 1; loadMaster(); };
   $('#mDelivery').onchange = e => {
@@ -948,7 +976,7 @@ async function loadMaster() {
       <td>${[mlink(r.website, 'Web'), mlink(r.instagram, 'Instagram'), mlink(r.facebook, 'Facebook'), mlink(r.linkedin, 'LinkedIn'), mlink(r.maps_url, 'Maps')].filter(Boolean).join(' · ') || '<span class="muted">—</span>'}
         ${r.rating ? `<div class="muted">★ ${r.rating} · ${r.reviews || 0} reseñas</div>` : ''}</td>
       <td>${r.campaign_count} ${r.campaign_count === 1 ? 'campaña' : 'campañas'} · ${r.owner_count} ${r.owner_count === 1 ? 'usuario' : 'usuarios'}<div class="muted">${esc(r.sources.join(', '))}<br>Último dato: ${esc(utcLabel(r.last_seen))}</div></td>
-      <td><span class="score">${r.quality}/100</span>${r.delivered ? `<div class="muted">Entregado ${r.delivered} ${r.delivered === 1 ? 'vez' : 'veces'}</div>` : ''}</td></tr>`).join('')
+      <td>${r.excluded ? '<span class="muted">—</span>' : confBadge(r.confidence_level, r.confidence)}<div class="muted" style="margin-top:6px">Completitud ${r.quality}/100</div>${r.delivered ? `<div class="muted">Entregado ${r.delivered} ${r.delivered === 1 ? 'vez' : 'veces'}</div>` : ''}</td></tr>`).join('')
     : '<tr><td colspan="5" class="empty">No hay registros con estos filtros.</td></tr>';
   const pages = Math.max(1, Math.ceil(data.total / data.per_page));
   $('#masterPager').innerHTML = `<span>${data.total} ${data.total === 1 ? 'registro' : 'registros'} con estos filtros</span><span><button class="btn sm" ${masterPage <= 1 ? 'disabled' : ''} onclick="masterPage--;loadMaster()">‹</button> ${masterPage} de ${pages} <button class="btn sm" ${masterPage >= pages ? 'disabled' : ''} onclick="masterPage++;loadMaster()">›</button></span>`;
@@ -961,11 +989,13 @@ async function openMaster(id) {
   const field = (label, value) => value ? `<div><span class="muted">${label}:</span> ${value}</div>` : '';
   $('#drawer').innerHTML = `<div style="display:flex;justify-content:space-between;gap:12px"><h2>${esc(r.name)}</h2><button class="btn sm" onclick="closeDrawer()" aria-label="Cerrar detalle">✕</button></div>
     <div class="muted">Registro #${r.id} · completitud ${r.quality}/100 · primera vez visto ${esc(utcLabel(r.first_seen))} · último dato ${esc(utcLabel(r.last_seen))}${r.locked.length ? '<br>Campos corregidos a mano: ' + r.locked.map(esc).join(', ') : ''}</div>
+    ${r.excluded ? '' : `<div class="insight-box"><h3 style="display:flex;justify-content:space-between;align-items:center;gap:8px">Confianza ${confBadge(r.confidence_level, r.confidence)}</h3>${confReasons(r.confidence_reasons)}</div>`}
     ${r.excluded ? `<div class="insight-box"><b>Excluido de la base.</b> Sus datos de contacto se borraron de la base y nunca se exportan. Los datos siguen en las campañas de origen.<br><button class="btn sm" style="margin-top:8px" onclick="masterInclude(${r.id})">Volver a incluir</button></div>` : ''}
     <h3>Datos del negocio</h3><div class="evidence-item">
       ${field('Categoría', esc(r.category))}${field('Dirección', esc(r.address))}${field('Ciudad', esc(r.city))}
-      ${field('Teléfonos', [r.phone, ...r.phones.filter(x => x !== r.phone)].filter(Boolean).map(esc).join(', '))}${field('WhatsApp', mlink(r.whatsapp, r.whatsapp || ''))}
-      ${field('Correos', r.emails.map(e => esc(e) + (r.email_kinds[e] === 'personal' ? ' <span class="lead-tag tag-missing">posible dato personal</span>' : '')).join('<br>'))}
+      ${field('Teléfonos', [r.phone, ...r.phones.filter(x => x !== r.phone)].filter(Boolean).map(p => `${esc(p)} ${checkTag(r.verification?.phones?.[p])}`).join('<br>'))}${field('WhatsApp', mlink(r.whatsapp, r.whatsapp || ''))}
+      ${field('Correos', r.emails.map(e => { const v = r.verification?.emails?.[e], bad = v && !GOOD_CHECK.has(v.status) && v.status !== 'unknown';
+        return esc(e) + ' ' + checkTag(v) + (!bad && r.email_kinds[e] === 'personal' ? ' <span class="lead-tag tag-missing">posible dato personal</span>' : ''); }).join('<br>'))}
       ${field('Web', mlink(r.website, r.website || ''))}${field('Redes', [mlink(r.instagram, 'Instagram'), mlink(r.facebook, 'Facebook'), mlink(r.tiktok, 'TikTok'), mlink(r.linkedin, 'LinkedIn')].filter(Boolean).join(' · '))}
       ${field('Google Maps', mlink(r.maps_url, 'Abrir ficha'))}${field('Valoración', r.rating ? `★ ${r.rating} · ${r.reviews || 0} reseñas` : '')}${field('Estado', esc(r.business_status))}
       ${field('Datos RUES', Object.entries(r.extra || {}).map(([k, v]) => esc(k + ': ' + v)).join('<br>'))}${field('Web revisada', esc(utcLabel(r.verified_at)))}</div>
@@ -1001,6 +1031,20 @@ async function masterExclude(id) {
 }
 async function masterInclude(id) {
   try { await api(`/api/master/records/${id}/include`, {method: 'POST'}); toast('Incluido de nuevo'); openMaster(id); if ($('#masterRows')) loadMaster(); } catch (e) { toast(e.message); }
+}
+// Verificación de toda la base en segundo plano, con progreso.
+async function masterVerify(btn) {
+  let job;
+  try { job = await api('/api/master/verify', {method: 'POST'}); } catch (e) { return toast(e.message); }
+  if (!job.total) return toast('Todos los contactos están verificados (se repite cada 30 días).');
+  toast(`Verificando ${job.total} registros en segundo plano…`);
+  const poll = async () => {
+    const j = await api('/api/master/verify').catch(() => null);
+    const b = $('#mVerifyBtn'); if (!j || !b) return;
+    if (j.running) { b.disabled = true; b.textContent = `Verificando… ${j.done}/${j.total}`; setTimeout(poll, 1500); }
+    else { toast(`Verificación terminada · ${j.done} registros`); if ($('#masterRows')) showMaster(masterTab); }
+  };
+  poll();
 }
 async function masterResync(btn) {
   btn.disabled = true; btn.textContent = 'Resincronizando…';

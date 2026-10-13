@@ -111,6 +111,20 @@ Si en hPanel tienes activado el firewall del VPS, permite los puertos 80 y 443.
 
 **Con dominio propio:** crea un registro DNS tipo A (ej. `leads.tuagencia.com` → IP del VPS), cambia `SITE_ADDRESS` en `.env` y ejecuta `docker compose up -d`.
 
+## Verificación de contactos y nivel de confianza
+
+**Verificación gratuita** (sin enviar correos ni llamar). Se hace sola al final de cada campaña o tanda, al volver a revisar una web, con *Verificar ahora* en la pestaña Evidencia del lead, y para toda la base con **✓ Verificar contactos** (vuelve a comprobar lo que tenga más de 30 días).
+- **Correos:** formato, nombres de archivo capturados por error (`logo@2x.png`), correos de ejemplo o de servicios externos, dominios temporales o desechables, errores de escritura (`gmial.com`) y si el dominio tiene servidor de correo (registros DNS MX). No confirma que el buzón concreto exista; para eso hace falta un servicio de pago.
+- **Teléfonos:** válidos para su país y tipo (móvil, fijo…), con la librería de Google `phonenumbers`. La región por defecto es la de la campaña. No confirma que la línea esté activa.
+- Los correos que fallan la verificación **no se incluyen en las exportaciones** de la base.
+
+**Nivel de confianza** (0–100; Alta ≥ 70, Media ≥ 40, Baja < 40) de cada negocio en la base, con el desglose visible:
+- +15 si el mismo teléfono aparece en dos fuentes distintas (por ejemplo Maps y la web), +10 si está en RUES, +10 si la web fue revisada y es accesible, +5 si aparece en varias campañas.
+- +20 si hay un correo con dominio que recibe correo (+5 si es del mismo dominio que la web), +15 si el teléfono es válido; −10 si los correos o el teléfono fallan.
+- +20 / +12 / +6 si el dato se observó en los últimos 30 / 90 / 180 días.
+- +5 si Google Maps lo marca abierto; −15 si está cerrado temporalmente; −50 si está cerrado permanentemente.
+- En la base puedes filtrar y ordenar por confianza, y registrar entregas solo con confianza media o alta. La exportación incluye el nivel, el puntaje y la verificación del teléfono.
+
 ## Base de datos general (solo administradores)
 
 La sección **Base de datos** reúne en un solo lugar todos los negocios encontrados por las campañas de todo el equipo, sin duplicados. Es el activo comercial del negocio: se alimenta sola y se puede segmentar, exportar y vender.

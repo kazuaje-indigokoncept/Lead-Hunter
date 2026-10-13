@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from . import db, intelligence, companies, master
+from . import db, intelligence, companies, master, verify
 from .enrich import instagram, instagram_public, linkedin, website, people
 from .sources import maps_web, places, rues
 
@@ -302,6 +302,14 @@ class Runner:
                 self.check_stop()
                 base, span = i / n, 1 / n
                 await getattr(self, f"phase_{ph}")(client, kws, locs, base, span)
+        if not self.demo:
+            # Verificación gratuita de correos y teléfonos de lo encontrado (sin enviar nada).
+            sql, extra = self.scope("SELECT id FROM leads WHERE campaign_id = ?")
+            ids = [r["id"] for r in db.query(sql, (self.cid,) + extra)]
+            if ids:
+                self.check_stop()
+                await verify.verify_leads(ids)
+                self.log(f"Verificados correos y teléfonos de {len(ids)} {'negocio' if len(ids) == 1 else 'negocios'}.")
         total = db.one("SELECT COUNT(*) n FROM leads WHERE campaign_id = ?", (self.cid,))["n"]
         self.check_stop()
         if self.batch:

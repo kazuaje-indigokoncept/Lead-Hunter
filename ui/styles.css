@@ -279,3 +279,7 @@
   .data-table { @apply mt-3 w-full text-xs; }
   .data-table td, .data-table th { @apply px-2 py-1.5; }
 }
+@layer components {
+  .tag-bad { @apply border-rose-200 bg-rose-50 text-rose-700; }
+  .kv dd .lead-tag { @apply ml-1 inline-block align-middle; }
+}

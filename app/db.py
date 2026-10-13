@@ -83,8 +83,8 @@ CREATE TABLE IF NOT EXISTS company_contacts (
 
 JSON_FIELDS = {"keywords", "locations", "sources", "options", "log", "emails", "extra"}
 JSON_FIELDS |= {"provenance", "web_audit", "phones", "linkedin_data", "instagram_data", "evidence_records", "review_data"}
-JSON_FIELDS |= {"locked", "filters", "runs"}
-DICT_FIELDS = {"options", "extra", "provenance", "web_audit", "linkedin_data", "instagram_data", "review_data", "filters"}
+JSON_FIELDS |= {"locked", "filters", "runs", "verification", "confidence_reasons"}
+DICT_FIELDS = {"options", "extra", "provenance", "web_audit", "linkedin_data", "instagram_data", "review_data", "filters", "verification"}
 
 
 @contextmanager

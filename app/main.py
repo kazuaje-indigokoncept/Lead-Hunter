@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from . import auth, db, jobs, intelligence, companies, master, dashboard
+from . import auth, db, jobs, intelligence, companies, master, dashboard, verify
 from .enrich import website, linkedin, instagram_public
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
@@ -465,7 +465,10 @@ def decorate(lead, profile=""):
         profile = (c or {}).get("options", {}).get("sales_profile", "general")
     cid = companies.attach(lead)
     company = db.one("SELECT name FROM companies WHERE id=?", (cid,))
-    return {**lead, "company_id": cid, "company_name": company["name"], **intelligence.analyze(lead, profile)}
+    conf = db.one("SELECT confidence, confidence_level, confidence_reasons, excluded FROM master_records WHERE id = ?",
+                  (lead.get("master_id"),)) if lead.get("master_id") else None
+    return {**lead, "company_id": cid, "company_name": company["name"], "master_confidence": conf,
+            **intelligence.analyze(lead, profile)}
 
 
 def analyzed_rows(where, params, sales_profile="", opportunity="", tag="", min_priority=0, sort="score"):
@@ -799,6 +802,14 @@ def existing_lead(lid, user):
     return lead
 
 
+@app.post("/api/leads/{lid}/verify")
+async def verify_lead(lid: int, request: Request, sales_profile: str = ""):
+    """Verificación gratuita de correos y teléfonos del lead."""
+    lead = existing_lead(lid, _user(request))
+    await verify.verify_leads([lid])
+    return decorate(db.one("SELECT * FROM leads WHERE id = ?", (lid,)), sales_profile)
+
+
 @app.post("/api/leads/{lid}/review-website")
 async def review_website(lid: int, request: Request, sales_profile: str = ""):
     lead = existing_lead(lid, _user(request))
@@ -806,7 +817,11 @@ async def review_website(lid: int, request: Request, sales_profile: str = ""):
         raise HTTPException(400, "Este lead no tiene web para revisar")
     demo = db.get_setting("demo_mode", "1") == "1" or intelligence.analyze(lead)["data_quality"]["demo"]
     async with httpx.AsyncClient(headers={"User-Agent": website.UA}) as client:
-        return decorate(await jobs.enrich_lead(client, lead, demo), sales_profile)
+        updated = await jobs.enrich_lead(client, lead, demo)
+    if not demo:
+        await verify.verify_leads([lid])   # los correos nuevos de la web también se verifican
+        updated = db.one("SELECT * FROM leads WHERE id = ?", (lid,))
+    return decorate(updated, sales_profile)
 
 
 @app.post("/api/leads/{lid}/review-linkedin")

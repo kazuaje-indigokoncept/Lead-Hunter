@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, companies, db
+from . import auth, companies, db, verify
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS master_records (
@@ -101,9 +101,18 @@ GENERIC_EMAILS = {
 def init():
     with db.connect() as c:
         c.executescript(SCHEMA)
-        if "master_id" not in {r[1] for r in c.execute("PRAGMA table_info(leads)")}:
+        lead_cols = {r[1] for r in c.execute("PRAGMA table_info(leads)")}
+        if "master_id" not in lead_cols:
             c.execute("ALTER TABLE leads ADD COLUMN master_id INTEGER")
+        if "verification" not in lead_cols:
+            c.execute("ALTER TABLE leads ADD COLUMN verification TEXT NOT NULL DEFAULT '{}'")
         c.execute("CREATE INDEX IF NOT EXISTS leads_master ON leads(master_id)")
+        rec_cols = {r[1] for r in c.execute("PRAGMA table_info(master_records)")}
+        for name, ddl in (("verification", "TEXT NOT NULL DEFAULT '{}'"), ("confidence", "INTEGER NOT NULL DEFAULT 0"),
+                          ("confidence_level", "TEXT NOT NULL DEFAULT 'baja'"), ("confidence_reasons", "TEXT NOT NULL DEFAULT '[]'")):
+            if name not in rec_cols:
+                c.execute(f"ALTER TABLE master_records ADD COLUMN {name} {ddl}")
+        c.execute("CREATE INDEX IF NOT EXISTS master_records_conf ON master_records(confidence)")
 
 
 # ---------------- reglas de identidad ----------------
@@ -201,6 +210,105 @@ def excluded_by(mid, rec, keys, excl):
         or companies.normalized(rec.get("name")) in excl.get("name", set()))
 
 
+# ---------------- confianza ----------------
+LEVELS = (("alta", 70), ("media", 40), ("baja", 0))
+LEVEL_LABELS = {"alta": "Alta", "media": "Media", "baja": "Baja"}
+
+
+def _family(source):
+    source = source or ""
+    if source.startswith("google_maps"):
+        return "maps"
+    if source.startswith("rues"):
+        return "rues"
+    if source in ("website", "linkedin_public", "instagram_public", "instagram_api"):
+        return "web"
+    return source
+
+
+def merged_verification(leads, rec):
+    """Último resultado de verificación de cada correo y teléfono presente en el registro."""
+    emails, phones, checked = {}, {}, []
+    for l in leads:
+        v = l.get("verification") or {}
+        if v.get("checked_at"):
+            checked.append(v["checked_at"])
+        for kind, target in (("emails", emails), ("phones", phones)):
+            for item, result in (v.get(kind) or {}).items():
+                if item not in target or (result.get("checked_at") or "") >= (target[item].get("checked_at") or ""):
+                    target[item] = result
+    wanted_e = {e.lower() for e in rec.get("emails") or []}
+    wanted_p = set(lead_phones(rec))
+    return {"emails": {k: v for k, v in emails.items() if k in wanted_e},
+            "phones": {k: v for k, v in phones.items() if k in wanted_p},
+            "checked_at": max(checked) if checked else None}
+
+
+def confidence(rec, leads, ver):
+    """Puntaje explicable 0–100: coincidencia entre fuentes, verificación, frescura y actividad."""
+    if rec.get("excluded"):
+        return 0, "baja", [{"points": 0, "reason": "Excluido de la base"}]
+    reasons = []
+    add = lambda points, reason: reasons.append({"points": points, "reason": reason})
+    by_phone = {}
+    for l in leads:
+        for field in ("phone", "phones", "whatsapp"):
+            for r in (l.get("provenance") or {}).get(field, []):
+                digits = phone_digits(r.get("value"))
+                if digits:
+                    by_phone.setdefault(digits, set()).add(_family(r.get("source")))
+    if any(len(fams) >= 2 for fams in by_phone.values()):
+        add(15, "El mismo teléfono aparece en dos fuentes distintas")
+    if any((l.get("source") or "").startswith("rues") for l in leads):
+        add(10, "Registrado en una cámara de comercio (RUES)")
+    if any((l.get("web_audit") or {}).get("status") == "ok" for l in leads):
+        add(10, "Web del negocio revisada y accesible")
+    if (rec.get("campaign_count") or 0) >= 2:
+        add(5, "Encontrado en varias campañas")
+    s = verify.summary(ver)
+    if s["email_ok"]:
+        add(20, "Correo con un dominio que recibe correo")
+        dom = companies.domain(rec.get("website"))
+        if dom and any(e.endswith("@" + dom) and v.get("status") in verify.GOOD_EMAIL for e, v in ver["emails"].items()):
+            add(5, "Correo del mismo dominio que la web")
+    elif s["email_bad"]:
+        add(-10, "Los correos encontrados no pasaron la verificación")
+    if s["phone_ok"]:
+        add(15, "Teléfono válido para su país")
+    elif s["phone_bad"]:
+        add(-10, "El teléfono no es válido para su país")
+    try:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(rec.get("last_seen") or "")).days
+    except (TypeError, ValueError):
+        age = 9999
+    if age <= 30:
+        add(20, "Datos observados en los últimos 30 días")
+    elif age <= 90:
+        add(12, "Datos observados en los últimos 3 meses")
+    elif age <= 180:
+        add(6, "Datos observados en los últimos 6 meses")
+    else:
+        add(0, "Datos con más de 6 meses: conviene volver a revisarlos")
+    status = rec.get("business_status")
+    if status == "CLOSED_PERMANENTLY":
+        add(-50, "Google Maps lo marca como cerrado permanentemente")
+    elif status == "CLOSED_TEMPORARILY":
+        add(-15, "Google Maps lo marca como cerrado temporalmente")
+    elif status == "OPERATIONAL":
+        add(5, "Google Maps lo marca como abierto")
+    if not s["checked"]:
+        add(0, "Correos y teléfonos todavía sin verificar")
+    total = max(0, min(100, sum(r["points"] for r in reasons)))
+    level = next(name for name, floor in LEVELS if total >= floor)
+    return total, level, reasons
+
+
+def usable_emails(rec):
+    """Correos que no fallaron la verificación (los no verificados se conservan)."""
+    ver = (rec.get("verification") or {}).get("emails") or {}
+    return [e for e in rec.get("emails") or [] if (ver.get(e) or {}).get("status", "unknown") in verify.GOOD_EMAIL | {"unknown"}]
+
+
 # ---------------- sincronización ----------------
 def rebuild(mid, excl=None):
     """Recalcula el registro maestro a partir de todos sus leads."""
@@ -248,6 +356,9 @@ def rebuild(mid, excl=None):
             out[field] = [] if field in ("phones", "emails") else {} if field == "extra" else None
         merged = {**merged, **out}
     out["quality"] = 0 if excluded else score(merged)
+    ver = merged_verification(leads, merged)
+    out["verification"] = ver
+    out["confidence"], out["confidence_level"], out["confidence_reasons"] = confidence({**merged, "excluded": excluded}, leads, ver)
     db.update("master_records", mid, out)
 
 
@@ -336,7 +447,7 @@ def merge(source_id, target_id):
 
 
 # ---------------- consultas ----------------
-SORTS = {"recent": "last_seen DESC", "quality": "quality DESC, last_seen DESC", "name": "name COLLATE NOCASE",
+SORTS = {"recent": "last_seen DESC", "quality": "quality DESC, last_seen DESC", "confidence": "confidence DESC, quality DESC", "name": "name COLLATE NOCASE",
          "rating": "rating DESC", "reviews": "reviews DESC", "sources": "lead_count DESC"}
 
 
@@ -353,6 +464,7 @@ class Filters(BaseModel):
     has_ig: bool = False
     min_rating: float = 0
     min_quality: int = 0
+    min_confidence: int = 0
     updated_days: int = 0
     excluded: str = "hide"          # hide | only | all
     not_delivered_to: str = ""
@@ -389,6 +501,8 @@ def where(f: Filters):
         w.append("instagram IS NOT NULL AND instagram != ''")
     if f.min_rating:
         w.append("rating >= ?"); p.append(f.min_rating)
+    if f.min_confidence:
+        w.append("confidence >= ?"); p.append(f.min_confidence)
     if f.min_quality:
         w.append("quality >= ?"); p.append(f.min_quality)
     if f.updated_days:
@@ -435,7 +549,8 @@ EXPORT_COLS = [("id", "ID base"), ("name", "Nombre"), ("category", "Categoría")
                ("instagram", "Instagram"), ("facebook", "Facebook"), ("tiktok", "TikTok"),
                ("linkedin", "LinkedIn empresa"), ("rating", "Rating"), ("reviews", "Reseñas"),
                ("business_status", "Estado del negocio"), ("maps_url", "Google Maps"), ("rues", "Datos RUES"),
-               ("quality", "Completitud (0-100)"), ("first_seen", "Primera vez visto"),
+               ("confidence_label", "Nivel de confianza"), ("confidence", "Confianza (0-100)"),
+               ("phone_check", "Verificación del teléfono"), ("quality", "Completitud (0-100)"), ("first_seen", "Primera vez visto"),
                ("last_seen", "Último dato observado"), ("verified_at", "Web revisada")]
 PERSONAL_COLS = [("personal_emails", "Otros correos (posible dato personal)"), ("people", "Personas de contacto")]
 
@@ -446,8 +561,12 @@ def export_rows(ids, include_personal):
         chunk = ids[i:i + 500]
         recs = db.query(f"SELECT * FROM master_records WHERE excluded = 0 AND id IN ({','.join('?' * len(chunk))}) ORDER BY id", tuple(chunk))
         for r in recs:
-            emails = r["emails"] or []
+            # Los correos que fallaron la verificación no se entregan.
+            emails = usable_emails(r)
+            phone_ver = ((r["verification"] or {}).get("phones") or {}).get(r["phone"] or "", {})
             row = {**r, "other_phones": ", ".join(p for p in r["phones"] if p != r["phone"]),
+                   "confidence_label": LEVEL_LABELS.get(r["confidence_level"], ""),
+                   "phone_check": phone_ver.get("label", "Sin verificar" if r["phone"] else ""),
                    "company_emails": ", ".join(e for e in emails if email_kind(e) == "empresa"),
                    "rues": ", ".join(f"{k}: {v}" for k, v in (r["extra"] or {}).items())}
             if include_personal:
@@ -507,6 +626,7 @@ router = APIRouter(prefix="/api/master", dependencies=[Depends(auth.require_admi
 def filters_dep(q: str = "", city: str = "", category: str = "", source: str = "", has_email: bool = False,
                 has_phone: bool = False, has_wa: bool = False, has_web: bool = False, no_web: bool = False,
                 has_ig: bool = False, min_rating: float = Query(0, ge=0, le=5), min_quality: int = Query(0, ge=0, le=100),
+                min_confidence: int = Query(0, ge=0, le=100),
                 updated_days: int = Query(0, ge=0, le=3650), excluded: str = "hide", not_delivered_to: str = "",
                 never_delivered: bool = False, delivery_id: int = 0):
     if excluded not in ("hide", "only", "all"):
@@ -529,7 +649,10 @@ def stats():
         SUM(excluded = 0 AND whatsapp IS NOT NULL AND whatsapp != '') wa,
         SUM(excluded = 0 AND website IS NOT NULL AND website != '') web,
         COUNT(DISTINCT CASE WHEN excluded = 0 THEN city END) cities,
-        ROUND(AVG(CASE WHEN excluded = 0 THEN quality END), 0) avg_quality FROM master_records""")
+        ROUND(AVG(CASE WHEN excluded = 0 THEN quality END), 0) avg_quality,
+        SUM(excluded = 0 AND confidence_level = 'alta') conf_high, SUM(excluded = 0 AND confidence_level = 'media') conf_mid,
+        SUM(excluded = 0 AND confidence_level = 'baja') conf_low,
+        SUM(excluded = 0 AND verification NOT LIKE '%"checked_at": "%') unverified FROM master_records""")
     d = db.one("SELECT COUNT(*) deliveries, COUNT(DISTINCT client) clients FROM master_deliveries")
     sold = db.one("SELECT COUNT(DISTINCT master_id) n FROM master_delivery_items")["n"]
     pending = db.one("SELECT COUNT(*) n FROM leads WHERE master_id IS NULL")["n"]
@@ -659,6 +782,37 @@ def include_record(mid: int):
     if rec["excluded"]:
         raise HTTPException(409, "Sigue excluido por otra regla (correo o nombre). Revísala en Exclusiones.")
     return get_record(mid)
+
+
+VERIFY_JOB = {"running": False, "done": 0, "total": 0, "started_at": None}
+
+
+async def _verify_all(ids):
+    try:
+        for lid in ids:
+            await verify.verify_leads([lid])
+            VERIFY_JOB["done"] += 1
+    finally:
+        VERIFY_JOB["running"] = False
+
+
+@router.post("/verify")
+async def verify_base():
+    """Verifica en segundo plano los leads de la base sin verificar o con más de 30 días."""
+    import asyncio
+    if VERIFY_JOB["running"]:
+        return VERIFY_JOB
+    ids = [r["id"] for r in db.query("SELECT id, verification FROM leads WHERE master_id IS NOT NULL")
+           if verify.is_stale(r["verification"])]
+    VERIFY_JOB.update(running=bool(ids), done=0, total=len(ids), started_at=now_iso())
+    if ids:
+        asyncio.create_task(_verify_all(ids))
+    return VERIFY_JOB
+
+
+@router.get("/verify")
+def verify_status():
+    return VERIFY_JOB
 
 
 @router.post("/resync")
